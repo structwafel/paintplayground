@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Color Grid</title>
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(40, 20px);
+            /* gap: 1px; */
+        }
+
+        .box {
+            width: 20px;
+            height: 20px;
+            /* border: 1px solid #ccc; */
+            /* border-top: 1px solid #fff; */
+            cursor: pointer;
+            background-color: grey;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebSocket Color Grid</h1>
+    <div id="colorGrid" class="grid"></div>
+    <script>
+        const socket = new WebSocket('ws://localhost:3000/ws');
+        const grid = document.getElementById('colorGrid');
+
+        // Create a 20x20 grid
+        for (let i = 0; i < 2400; i++) {
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.dataset.id = i;
+            grid.appendChild(box);
+        }
+
+        socket.onopen = function (e) {
+            console.log("Connected to WebSocket");
+        };
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        socket.onclose = (event) => {
+            console.log('WebSocket connection closed:', event);
+        };
+
+
+
+
+        socket.onmessage = function (event) {
+            console.log('Message from server:', event.data);
+            let data = JSON.parse(event.data);
+            // expected structure:
+            // struct CellChangeMessage {
+            //     x: usize,
+            //     y: usize,
+            //     value: u8,
+            // }
+
+            // Update the grid based on the incoming message
+            const box = grid.querySelector(`[data-id="${data.x + data.y * 30}"]`);
+            // colors are (0-9) for now, where each number is a different color
+
+            let color = colorFromNumber(data.value);
+            box.style.backgroundColor = color;
+        };
+
+        let isMouseDown = false;
+        let lastPaintedBox = null;
+
+        grid.addEventListener('mousedown', function (e) {
+            isMouseDown = true;
+            paintBox(e);
+        });
+
+        grid.addEventListener('mouseup', function () {
+            isMouseDown = false;
+            lastPaintedBox = null;
+        });
+
+        grid.addEventListener('mousemove', function (e) {
+            if (isMouseDown) {
+                paintBox(e);
+            }
+        });
+
+        function paintBox(e) {
+            if (e.target.classList.contains('box') && e.target !== lastPaintedBox) {
+                let color_number = getRandomNumber09();
+                e.target.style.backgroundColor = colorFromNumber(color_number);
+
+                // Send coloring data to server
+                socket.send(JSON.stringify({
+                    x: e.target.dataset.id % 30,
+                    y: Math.floor(e.target.dataset.id / 30),
+                    value: color_number,
+                }), (error) => {
+                    if (error) {
+                        console.error('Error sending message:', error);
+                    }
+                });
+
+                console.log('Painted box:', e.target.dataset.id);
+
+                lastPaintedBox = e.target;
+            }
+        }
+
+        // get a random color from 0-9
+        function getRandomNumber09() {
+            return Math.floor(Math.random() * 10);
+        }
+
+        // get color from number value
+        function colorFromNumber(number) {
+            switch (number) {
+                case 0:
+                    return 'white';
+                case 1:
+                    return 'red';
+                case 2:
+                    return 'green';
+                case 3:
+                    return 'blue';
+                case 4:
+                    return 'yellow';
+                case 5:
+                    return 'purple';
+                case 6:
+                    return 'orange';
+                case 7:
+                    return 'pink';
+                case 8:
+                    return 'brown';
+                case 9:
+                    return 'black';
+                default:
+                    return 'white';
+            }
+        }
+    </script>
+</body>
+
+</html>
