@@ -18,7 +18,7 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 type CellChangeReceiver = broadcast::Receiver<CellChangeMessage>;
 type CellChangeSender = broadcast::Sender<CellChangeMessage>;
@@ -78,12 +78,12 @@ struct CellChangeMessage {
 
 #[tokio::main]
 async fn main() {
-    console_subscriber::init();
+    // console_subscriber::init();
 
-    // tracing_subscriber::fmt()
-    //     .with_max_level(tracing::Level::DEBUG)
-    //     .with_target(false)
-    //     .init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_target(false)
+        .init();
 
     let (sender, receiver) = broadcast::channel(100000);
     let state = AppState::new(sender);
@@ -174,21 +174,27 @@ async fn handle_socket(
 
     let mut handler_sender = tokio::spawn(async move {
         loop {
-            // read messages from reciever, and send them to the client
-            while let Ok(msg) = state_receiver.try_recv() {
-                let msg = serde_json::to_string(&msg).unwrap();
+            match state_receiver.recv().await {
+                Ok(msg) => {
+                    let msg = serde_json::to_string(&msg).unwrap();
+                    match sender.send(msg.into()).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            // try to reconnect?
 
-                match sender.send(msg.into()).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        info!("error sending message: {:?}", e);
-                        break;
+                            info!("error sending message: {:?}", e);
+                            return;
+                        }
                     }
                 }
+                Err(e) => {
+                    info!("error receiving message: {:?}", e);
+                    return;
+                }
             }
-
-            // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
+
+        // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     });
 
     // If any one of the tasks exit, abort the other.
