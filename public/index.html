@@ -28,6 +28,7 @@
     <div id="colorGrid" class="grid"></div>
     <script>
         const socket = new WebSocket('ws://localhost:3000/ws');
+        socket.binaryType = "arraybuffer";
         const grid = document.getElementById('colorGrid');
 
         // Create a 20x20 grid
@@ -40,6 +41,7 @@
 
         socket.onopen = function (e) {
             console.log("Connected to WebSocket");
+            console.log(e);
         };
         socket.onerror = (error) => {
             console.error('WebSocket error:', error);
@@ -54,6 +56,24 @@
 
         socket.onmessage = function (event) {
             console.log('Message from server:', event.data);
+            // if it is the first message, clear the grid and populate it with the data
+
+            if (event.data instanceof ArrayBuffer) {
+                console.log('Received binary data');
+                // binary frame
+                const view = new DataView(event.data);
+
+                // the data is a 2400 byte array of u8 values, where it is a flattened 40x60 grid
+
+                for (let i = 0; i < 2400; i++) {
+                    const box = grid.querySelector(`[data-id="${i}"]`);
+                    let color = colorFromNumber(view.getUint8(i));
+                    box.style.backgroundColor = color;
+                }
+
+                return;
+            }
+
             let data = JSON.parse(event.data);
             // expected structure:
             // struct CellChangeMessage {
@@ -63,7 +83,8 @@
             // }
 
             // Update the grid based on the incoming message
-            const box = grid.querySelector(`[data-id="${data.x + data.y * 30}"]`);
+            console.log('painting box:', data.index);
+            const box = grid.querySelector(`[data-id="${data.index}"]`);
             // colors are (0-9) for now, where each number is a different color
 
             let color = colorFromNumber(data.value);
@@ -91,13 +112,14 @@
 
         function paintBox(e) {
             if (e.target.classList.contains('box') && e.target !== lastPaintedBox) {
-                let color_number = getRandomNumber09();
+                let color_number = getRandomNumber19();
                 e.target.style.backgroundColor = colorFromNumber(color_number);
+
 
                 // Send coloring data to server
                 socket.send(JSON.stringify({
-                    x: e.target.dataset.id % 30,
-                    y: Math.floor(e.target.dataset.id / 30),
+                    // send the index of the box, as a number
+                    index: parseInt(e.target.dataset.id),
                     value: color_number,
                 }), (error) => {
                     if (error) {
@@ -115,12 +137,16 @@
         function getRandomNumber09() {
             return Math.floor(Math.random() * 10);
         }
+        // get a random color from 1-9
+        function getRandomNumber19() {
+            return Math.floor(Math.random() * 9) + 1;
+        }
 
         // get color from number value
         function colorFromNumber(number) {
             switch (number) {
                 case 0:
-                    return 'white';
+                    return 'grey';
                 case 1:
                     return 'red';
                 case 2:

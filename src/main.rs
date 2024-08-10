@@ -4,7 +4,10 @@ use std::{
 };
 
 use axum::{
-    extract::{ws::WebSocket, State, WebSocketUpgrade},
+    extract::{
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
+    },
     response::IntoResponse,
     routing::get,
     Extension, Router,
@@ -18,22 +21,25 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
+mod test;
+
 use tracing::{debug, error, info};
 
 type CellChangeReceiver = broadcast::Receiver<CellChangeMessage>;
 type CellChangeSender = broadcast::Sender<CellChangeMessage>;
 
-const BOARD_SIZE_X: usize = 40;
-const BOARD_SIZE_Y: usize = 60;
+type Color = u8;
+type Chunk = [Color; BOARD_SIZE];
+const BOARD_SIZE: usize = 2400;
 
-fn new_board() -> [[u8; BOARD_SIZE_Y]; BOARD_SIZE_X] {
-    [[0; BOARD_SIZE_Y]; BOARD_SIZE_X]
+fn new_board() -> Chunk {
+    [0; BOARD_SIZE]
 }
 
 #[derive(Debug, Clone)]
 struct AppState {
-    // the game board, a 30x30 grid array
-    board: Arc<Mutex<[[u8; BOARD_SIZE_Y]; BOARD_SIZE_X]>>,
+    // the game board
+    board: Arc<Mutex<Chunk>>,
 
     // the broadcast sender to send messages to all clients
     client_sender: CellChangeSender,
@@ -54,11 +60,16 @@ impl AppState {
     fn change_cell(&mut self, change: &CellChangeMessage) {
         let mut board = self.board.lock().unwrap();
 
-        if change.x >= BOARD_SIZE_X || change.y >= BOARD_SIZE_Y {
+        if change.index >= BOARD_SIZE {
             return;
         }
 
-        board[change.x][change.y] = change.value;
+        board[change.index] = change.value;
+    }
+
+    fn get_board(&self) -> Chunk {
+        let board = self.board.lock().unwrap();
+        *board
     }
 }
 
@@ -71,8 +82,7 @@ impl Clone for Receiver {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct CellChangeMessage {
-    x: usize,
-    y: usize,
+    index: usize,
     value: u8,
 }
 
@@ -132,6 +142,18 @@ async fn handle_socket(
 ) {
     // handle the websocket
     let (mut sender, mut receiver) = socket.split();
+
+    // Send the entire board state to the client upon connection
+    let board_state = state.get_board(); // Assuming this method exists
+
+    // board_state is a 2D array, we need to convert it to a 1D array of bytes.
+    // first all the x values, then all the y values.
+    // let board_state: Vec<u8> = board_state.iter().flatten().copied().collect();
+
+    if let Err(e) = sender.send(Message::Binary(board_state.into())).await {
+        info!("error sending board state: {:?}", e);
+        return;
+    }
 
     let mut handler_receiver = tokio::spawn(async move {
         while let Some(msg) = receiver.next().await {
