@@ -9,7 +9,7 @@ use tungstenite::{
 };
 
 const SERVER: &str = "ws://127.0.0.1:3000/ws";
-const N_CLIENTS: usize = 10000;
+const N_CLIENTS: usize = 1000;
 const TIMEOUT: u64 = 3000;
 
 #[tokio::main]

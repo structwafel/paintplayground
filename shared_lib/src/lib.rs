@@ -8,6 +8,7 @@ pub struct CellChangeMessage {
 
 pub const BOARD_SIZE: usize = 1_000_000;
 
+#[derive(Debug, Clone)]
 pub struct PackedCell(u64);
 
 impl PackedCell {
