@@ -8,7 +8,7 @@
     <style>
         .grid {
             display: grid;
-            grid-template-columns: repeat(40, 20px);
+            grid-template-columns: repeat(1000, 20px);
             /* gap: 1px; */
         }
 
@@ -32,7 +32,7 @@
         const grid = document.getElementById('colorGrid');
 
         // Create a 20x20 grid
-        for (let i = 0; i < 2400; i++) {
+        for (let i = 0; i < 1000000; i++) {
             const box = document.createElement('div');
             box.className = 'box';
             box.dataset.id = i;
@@ -58,14 +58,15 @@
             console.log('Message from server:', event.data);
             // if it is the first message, clear the grid and populate it with the data
 
-            if (event.data instanceof ArrayBuffer) {
+            // exact 10000 is the size of the chunk
+            if (event.data instanceof ArrayBuffer && event.data.byteLength === 10000) {
                 console.log('Received binary data');
                 // binary frame
                 const view = new DataView(event.data);
 
                 // the data is a 2400 byte array of u8 values, where it is a flattened 40x60 grid
 
-                for (let i = 0; i < 2400; i++) {
+                for (let i = 0; i < event.data.byteLength; i++) {
                     const box = grid.querySelector(`[data-id="${i}"]`);
                     let color = colorFromNumber(view.getUint8(i));
                     box.style.backgroundColor = color;
@@ -74,16 +75,19 @@
                 return;
             }
 
-            let data = JSON.parse(event.data);
-            // expected structure: a vec of CellChangeMessage
-            // struct CellChangeMessage {
-            //     x: usize,
-            //     y: usize,
-            //     value: u8,
-            // }
+            if (event.data instanceof ArrayBuffer) {
+                console.log('Received binary data');
+                const view = new DataView(event.data);
 
-            for (let i = 0; i < data.length; i++) {
-                paintBoxFromMessage(data[i]);
+                // Process each CellChangeMessage (8 bytes each)
+                for (let i = 0; i < event.data.byteLength; i += 8) {
+                    const packedValue = view.getBigUint64(i, true); // true for little-endian
+                    const index = Number(packedValue >> 4n);
+                    const colorNumber = Number(packedValue & 0xFn);
+                    const message = { index, value: colorNumber };
+                    paintBoxFromMessage(message);
+                }
+                return;
             }
         };
 
@@ -111,17 +115,20 @@
                 let color_number = getRandomNumber19();
                 e.target.style.backgroundColor = colorFromNumber(color_number);
 
+                // Prepare binary data
+                let index = BigInt(e.target.dataset.id); // Assuming index can be large
+                let color = color_number & 0xF; // Ensure color is within 4 bits
 
-                // Send coloring data to server
-                socket.send(JSON.stringify({
-                    // send the index of the box, as a number
-                    index: parseInt(e.target.dataset.id),
-                    value: color_number,
-                }), (error) => {
-                    if (error) {
-                        console.error('Error sending message:', error);
-                    }
-                });
+                // Create a buffer of 8 bytes (64 bits)
+                let buffer = new ArrayBuffer(8);
+                let view = new DataView(buffer);
+
+                // Pack index (60 bits) and color (4 bits) into the buffer
+                let packedValue = (index << 4n) | BigInt(color);
+                view.setBigUint64(0, packedValue, true); // true for little-endian
+
+                // Send binary data to server
+                socket.send(buffer);
 
                 console.log('Painted box:', e.target.dataset.id);
 

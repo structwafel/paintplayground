@@ -2,7 +2,6 @@ use std::{borrow::Cow, ops::ControlFlow};
 
 use futures::{stream::FuturesUnordered, SinkExt, StreamExt};
 
-use shared_lib::CellChangeMessage;
 use tokio_tungstenite::connect_async;
 use tungstenite::{
     protocol::{frame::coding::CloseCode, CloseFrame},
@@ -10,7 +9,8 @@ use tungstenite::{
 };
 
 const SERVER: &str = "ws://127.0.0.1:3000/ws";
-const N_CLIENTS: usize = 2000;
+const N_CLIENTS: usize = 10000;
+const TIMEOUT: u64 = 3000;
 
 #[tokio::main]
 async fn main() {
@@ -55,16 +55,12 @@ async fn spawn_client(who: usize) {
             let random_index = rand::random::<usize>() % shared_lib::BOARD_SIZE;
             let random_color = rand::random::<u8>() % 9;
 
-            let change_message = CellChangeMessage {
-                index: random_index,
-                value: random_color,
-            };
+            let packed_cell = shared_lib::PackedCell::new(random_index, random_color);
 
             // In any websocket error, break loop.
+
             if sender
-                .send(Message::Text(
-                    serde_json::to_string(&change_message).unwrap().into(),
-                ))
+                .send(Message::Binary(packed_cell.to_vec()))
                 .await
                 .is_err()
             {
@@ -72,7 +68,7 @@ async fn spawn_client(who: usize) {
                 return;
             }
 
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(TIMEOUT)).await;
         }
 
         // When we are done we may want our client to close connection cleanly.
