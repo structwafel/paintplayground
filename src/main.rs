@@ -15,6 +15,7 @@ use axum::{
 
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
+use shared_lib::{CellChangeMessage, BOARD_SIZE};
 use tokio::sync::broadcast;
 use tower_http::{
     services::ServeFile,
@@ -30,7 +31,8 @@ type CellChangeSender = broadcast::Sender<CellChangeMessage>;
 
 type Color = u8;
 type Chunk = [Color; BOARD_SIZE];
-const BOARD_SIZE: usize = 2400;
+
+// TODO hold all conenctions in a vec, loop through and check if connected, then send buffer to all connected clients
 
 fn new_board() -> Chunk {
     [0; BOARD_SIZE]
@@ -54,6 +56,10 @@ impl AppState {
     }
 
     fn broadcast(&mut self, message: CellChangeMessage) {
+        // println!(
+        //     "broadcast buffer size: {}",
+        //     self.client_sender.receiver_count()
+        // );
         self.client_sender.send(message).unwrap();
     }
 
@@ -80,22 +86,16 @@ impl Clone for Receiver {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct CellChangeMessage {
-    index: usize,
-    value: u8,
-}
-
 #[tokio::main]
 async fn main() {
     // console_subscriber::init();
 
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::ERROR)
         .with_target(false)
         .init();
 
-    let (sender, receiver) = broadcast::channel(100000);
+    let (sender, receiver) = broadcast::channel(1_000_000);
     let state = AppState::new(sender);
 
     // build our application with some routes

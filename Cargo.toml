@@ -1,3 +1,4 @@
+workspace = { members = ["shared_lib"] }
 [package]
 name = "paintplayground"
 version = "0.1.0"
@@ -5,8 +6,16 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[[bin]]
+name = "server"
+path = "src/main.rs"
 
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+shared_lib = { path = "./shared_lib" }
 
 futures = "0.3"
 futures-util = { version = "0.3", default-features = false, features = [
@@ -15,6 +24,7 @@ futures-util = { version = "0.3", default-features = false, features = [
 ] }
 
 tokio = { version = "1.39.2", features = ["full"] }
+console-subscriber = "0.4.0"
 
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -25,8 +35,11 @@ axum-extra = { version = "0.9.3", features = ["typed-header"] }
 
 tower = { version = "0.4.13" }
 tower-http = { version = "0.5.2", features = ["fs", "trace"] }
+
 serde = { version = "1.0.205", features = ["derive"] }
 serde_json = "1.0.122"
-console-subscriber = "0.4.0"
+
 rand = "0.8.5"
 lz4_flex = "0.11.3"
+tungstenite = "0.23.0"
+tokio-tungstenite = "0.23.1"
