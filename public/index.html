@@ -75,20 +75,16 @@
             }
 
             let data = JSON.parse(event.data);
-            // expected structure:
+            // expected structure: a vec of CellChangeMessage
             // struct CellChangeMessage {
             //     x: usize,
             //     y: usize,
             //     value: u8,
             // }
 
-            // Update the grid based on the incoming message
-            console.log('painting box:', data.index);
-            const box = grid.querySelector(`[data-id="${data.index}"]`);
-            // colors are (0-9) for now, where each number is a different color
-
-            let color = colorFromNumber(data.value);
-            box.style.backgroundColor = color;
+            for (let i = 0; i < data.length; i++) {
+                paintBoxFromMessage(data[i]);
+            }
         };
 
         let isMouseDown = false;
@@ -168,6 +164,12 @@
                 default:
                     return 'white';
             }
+        }
+
+        function paintBoxFromMessage(data) {
+            const box = grid.querySelector(`[data-id="${data.index}"]`);
+            let color = colorFromNumber(data.value);
+            box.style.backgroundColor = color;
         }
     </script>
 </body>

@@ -14,7 +14,6 @@ use axum::{
 };
 
 use futures::{sink::SinkExt, stream::StreamExt};
-use serde::{Deserialize, Serialize};
 use shared_lib::{CellChangeMessage, BOARD_SIZE};
 use tokio::sync::broadcast;
 use tower_http::{
@@ -22,12 +21,16 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
+#[cfg(test)]
 mod test;
 
 use tracing::{debug, error, info};
 
-type CellChangeReceiver = broadcast::Receiver<CellChangeMessage>;
-type CellChangeSender = broadcast::Sender<CellChangeMessage>;
+const BUFFER_SIZE: usize = 10_000;
+const CLEAR_BUFFER_INTERVAL: u64 = 5;
+
+type CellChangeReceiver = broadcast::Receiver<Vec<CellChangeMessage>>;
+type CellChangeSender = broadcast::Sender<Vec<CellChangeMessage>>;
 
 type Color = u8;
 type Chunk = [Color; BOARD_SIZE];
@@ -42,6 +45,10 @@ fn new_board() -> Chunk {
 struct AppState {
     // the game board
     board: Arc<Mutex<Chunk>>,
+    // buffer to store the changes to the board
+    buffer: Arc<Mutex<Vec<CellChangeMessage>>>,
+    // keep track of the last time the board was updated
+    last_update: std::time::Instant,
 
     // the broadcast sender to send messages to all clients
     client_sender: CellChangeSender,
@@ -51,28 +58,54 @@ impl AppState {
     fn new(sender: CellChangeSender) -> Self {
         Self {
             board: Arc::new(Mutex::new(new_board())),
+            last_update: std::time::Instant::now(),
+            buffer: Arc::new(Mutex::new(Vec::new())),
             client_sender: sender,
         }
     }
 
-    fn broadcast(&mut self, message: CellChangeMessage) {
+    fn broadcast(&mut self, messages: Vec<CellChangeMessage>) {
         // println!(
         //     "broadcast buffer size: {}",
         //     self.client_sender.receiver_count()
         // );
-        self.client_sender.send(message).unwrap();
+        self.client_sender.send(messages).unwrap();
     }
 
     fn change_cell(&mut self, change: &CellChangeMessage) {
-        let mut board = self.board.lock().unwrap();
-
         if change.index >= BOARD_SIZE {
             return;
         }
 
-        board[change.index] = change.value;
+        // add the change to the buffer
+        let mut buffer = self.buffer.lock().unwrap();
+        buffer.push(change.clone());
+
+        // if the buffer is full/ or a second has passed since the last update, update the board
+        if buffer.len() >= BUFFER_SIZE {
+            let buffer_clone = buffer.clone();
+            buffer.clear();
+            drop(buffer);
+            info!("flushing buffer");
+            self.flush_buffer(buffer_clone);
+        }
     }
 
+    fn flush_buffer(&mut self, buffer: Vec<CellChangeMessage>) {
+        if buffer.is_empty() {
+            return;
+        }
+
+        {
+            let mut board = self.board.lock().unwrap();
+            for change in buffer.iter() {
+                board[change.index] = change.value;
+            }
+        }
+
+        self.broadcast(buffer);
+        self.last_update = std::time::Instant::now();
+    }
     fn get_board(&self) -> Chunk {
         let board = self.board.lock().unwrap();
         *board
@@ -97,6 +130,20 @@ async fn main() {
 
     let (sender, receiver) = broadcast::channel(1_000_000);
     let state = AppState::new(sender);
+
+    // spawn a task to flush the buffer every second
+    let mut state_clone = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(CLEAR_BUFFER_INTERVAL)).await;
+            let mut buffer = state_clone.buffer.lock().unwrap();
+            let buffer_clone = buffer.clone();
+            buffer.clear();
+            drop(buffer);
+            info!("flushing buffer, every second");
+            state_clone.flush_buffer(buffer_clone);
+        }
+    });
 
     // build our application with some routes
     let app = Router::new()
@@ -181,7 +228,7 @@ async fn handle_socket(
                     state.change_cell(&message);
 
                     // broadcast the message to all clients
-                    state.broadcast(message);
+                    // state.broadcast(message);
                 }
 
                 axum::extract::ws::Message::Binary(_) => todo!(),

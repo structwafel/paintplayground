@@ -10,7 +10,7 @@ use tungstenite::{
 };
 
 const SERVER: &str = "ws://127.0.0.1:3000/ws";
-const N_CLIENTS: usize = 10000;
+const N_CLIENTS: usize = 2000;
 
 #[tokio::main]
 async fn main() {
@@ -72,7 +72,7 @@ async fn spawn_client(who: usize) {
                 return;
             }
 
-            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }
 
         // When we are done we may want our client to close connection cleanly.
