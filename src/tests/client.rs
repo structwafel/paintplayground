@@ -1,6 +1,6 @@
-use std::{borrow::Cow, ops::ControlFlow};
+use std::{borrow::Cow, ops::ControlFlow, time::Duration};
 
-use futures::{stream::FuturesUnordered, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 
 use tokio_tungstenite::connect_async;
 use tungstenite::{
@@ -9,20 +9,16 @@ use tungstenite::{
 };
 
 const SERVER: &str = "ws://127.0.0.1:3000/ws";
-const N_CLIENTS: usize = 2000;
-const TIMEOUT: u64 = 3000;
+const TIMEOUT: u64 = 1000;
 
-#[tokio::main]
-async fn main() {
-    // create 1000 clients with tungstenitd
-    let mut clients = (0..N_CLIENTS)
-        .map(|cli| tokio::spawn(spawn_client(cli)))
-        .collect::<FuturesUnordered<_>>();
+pub async fn spawn_clients(n: usize) {
+    let mut clients = Vec::new();
+    for i in 0..n {
+        clients.push(spawn_client(i));
+    }
 
-    // wait for all clients to finish
-    while let Some(_) = clients.next().await {}
-
-    println!("All clients finished");
+    // await all clients to finish
+    futures::future::join_all(clients).await;
 }
 
 //creates a client. quietly exits on failure.
@@ -43,11 +39,23 @@ async fn spawn_client(who: usize) {
 
     let (mut sender, mut receiver) = ws_stream.split();
 
-    //we can ping the server for start
-    sender
-        .send(Message::Ping("Hello, Server!".into()))
-        .await
-        .expect("Can not send!");
+    //     // request the entire board,
+    let response = reqwest::get("http://localhost:3000/board").await.unwrap();
+    let board = response.bytes().await.unwrap();
+
+    // check if the frist 5 entries in the byte array are 0.
+    for entry in board.to_vec().iter().take(10) {
+        if entry == &0x20 {
+            println!("entry is 20")
+        }
+    }
+    drop(board);
+
+    // //we can ping the server for start
+    // sender
+    //     .send(Message::Ping("Hello, Server!".into()))
+    //     .await
+    //     .expect("Can not send!");
 
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
@@ -87,6 +95,21 @@ async fn spawn_client(who: usize) {
     //receiver just prints whatever it gets
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
+            // let number = rand::random::<u8>();
+            // if number < 10 {
+            //     // request the entire board,
+            //     let response = reqwest::get("http://localhost:3000/board").await.unwrap();
+            //     let board = response.bytes().await.unwrap();
+
+            //     // check if the frist 5 entries in the byte array are 0.
+            //     for entry in board.to_vec().iter().take(10) {
+            //         if entry == &0x20 {
+            //             println!("entry is 20")
+            //         }
+            //     }
+            //     drop(board);
+            // }
+
             // print message and break if instructed to do so
             if process_message(msg, who).is_break() {
                 break;

@@ -10,9 +10,9 @@ edition = "2021"
 name = "server"
 path = "src/main.rs"
 
-[[bin]]
-name = "client"
-path = "src/client.rs"
+# [[bin]]
+# name = "client"
+# path = "src/client.rs"
 
 [dependencies]
 shared_lib = { path = "./shared_lib" }
@@ -23,8 +23,8 @@ futures-util = { version = "0.3", default-features = false, features = [
     "std",
 ] }
 
-tokio = { version = "1.39.2", features = ["full"] }
-console-subscriber = "0.4.0"
+tokio = { version = "1.39.2", features = ["macros", "rt-multi-thread"] }
+# console-subscriber = "0.4.0"
 
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -40,6 +40,11 @@ serde = { version = "1.0.205", features = ["derive"] }
 serde_json = "1.0.122"
 
 rand = "0.8.5"
-lz4_flex = "0.11.3"
-tungstenite = "0.23.0"
+
+[dev-dependencies]
+reqwest = "0.12.5"
+tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.23.1"
+tungstenite = "0.23.0"
+futures = "0.3"
+lz4_flex = "0.11.3"

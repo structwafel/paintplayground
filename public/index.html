@@ -39,20 +39,21 @@
     <script>
         let selectedColor = 'red';
         const colorMapping = {
-        'grey': 0,
-        'red': 1,
-        'green': 2,
-        'blue': 3,
-        'yellow': 4,
-        'purple': 5,
-        'orange': 6,
-        'pink': 7,
-        'brown': 8,
-        'black': 9
+            'grey': 0,
+            'red': 1,
+            'green': 2,
+            'blue': 3,
+            'yellow': 4,
+            'purple': 5,
+            'orange': 6,
+            'pink': 7,
+            'brown': 8,
+            'black': 9
         };
         document.getElementById('color-picker').addEventListener('click', function (event) {
             selectedColor = event.target.id;
         });
+
 
 
         const socket = new WebSocket('ws://localhost:3000/ws');
@@ -122,27 +123,37 @@
                 console.log('Received binary message');
                 const view = new DataView(event.data);
                 const messageType = view.getUint8(0);
-                if (messageType === 0x00) {
-                    console.log('Received entire chunk');
-                    // Entire chunk
-                    for (let i = 1; i < event.data.byteLength; i++) {
-                        const color = colorFromNumber(view.getUint8(i));
-                        colors[i - 1] = color;
-                    }
-                } else if (messageType === 0x01) {
-                    console.log('Received chunk updates');
-                    // Chunk updates
-                    for (let i = 1; i < event.data.byteLength; i += 8) {
-                        const packedValue = view.getBigUint64(i, true);
-                        const index = Number(packedValue >> 4n);
-                        const colorNumber = Number(packedValue & 0xFn);
-                        const color = colorFromNumber(colorNumber);
-                        colors[index] = color;
-                    }
+                console.log('Received chunk updates');
+                // Chunk updates
+                for (let i = 0; i < event.data.byteLength; i += 8) {
+                    const packedValue = view.getBigUint64(i, true);
+                    const index = Number(packedValue >> 4n);
+                    const colorNumber = Number(packedValue & 0xFn);
+                    const color = colorFromNumber(colorNumber);
+                    colors[index] = color;
                 }
                 drawGrid();
             };
         };
+
+        async function fetchBoard() {
+            // Fetch the board data as an ArrayBuffer
+            const response = await fetch("http://localhost:3000/board");
+            const arrayBuffer = await response.arrayBuffer();
+
+            // Create a DataView to read the binary data
+            const view = new DataView(arrayBuffer);
+
+            console.log('Received entire chunk');
+            // Entire chunk
+            for (let i = 0; i < view.byteLength; i++) {
+                const color = colorFromNumber(view.getUint8(i));
+                colors[i] = color;
+            }
+            drawGrid();
+        }
+
+
 
         function colorFromNumber(number) {
             switch (number) {
@@ -170,6 +181,9 @@
                     return 'white';
             }
         }
+
+        // Call the fetchBoard function to load the board data
+        fetchBoard();
     </script>
 </body>
 

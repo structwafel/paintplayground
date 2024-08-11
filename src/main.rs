@@ -1,13 +1,18 @@
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc},
     time::Duration,
 };
+
+// use mimalloc::MiMalloc;
+
+// #[global_allocator]
+// static GLOBAL: MiMalloc = MiMalloc;
 
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
@@ -29,11 +34,11 @@ use tower_http::{
 };
 
 #[cfg(test)]
-mod test;
+mod tests;
 
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
-const CLEAR_BUFFER_INTERVAL: u64 = 5;
+const CLEAR_BUFFER_INTERVAL: u64 = 1;
 
 type NotifyCellChangeReceiver = broadcast::Receiver<Vec<PackedCell>>;
 type NotifyCellChangeSender = broadcast::Sender<Vec<PackedCell>>;
@@ -41,35 +46,48 @@ type NotifyCellChangeSender = broadcast::Sender<Vec<PackedCell>>;
 type CellChangeReceiver = mpsc::Receiver<shared_lib::PackedCell>;
 type CellChangeSender = mpsc::Sender<shared_lib::PackedCell>;
 
-type BoardRequester = mpsc::Sender<oneshot::Sender<Arc<Chunk>>>;
+type BoardRequester = mpsc::Sender<oneshot::Sender<Arc<RwLock<Chunk>>>>;
 
 type Color = u8;
 type Chunk = Box<[Color; BOARD_SIZE]>;
 
 #[inline]
-fn new_board() -> Chunk {
+fn new_chunk() -> Chunk {
     [0; BOARD_SIZE].into()
+}
+
+type Board = Arc<RwLock<Chunk>>;
+
+fn new_board() -> Board {
+    Arc::new(RwLock::new(new_chunk()))
 }
 
 #[derive(Debug, Clone)]
 struct AppState {
+    board: Board,
+    connections: Arc<AtomicUsize>,
+}
+
+#[derive(Debug, Clone)]
+struct CanvasManager {
     // the game board
-    board: Arc<RwLock<Chunk>>,
+    board: Board,
 
     // the broadcast sender to send messages to all clients
     client_sender: NotifyCellChangeSender,
 }
 
-impl AppState {
+impl CanvasManager {
     fn new(sender: NotifyCellChangeSender) -> Self {
         Self {
-            board: Arc::new(RwLock::new(new_board())),
+            board: new_board(),
             client_sender: sender,
         }
     }
 
     async fn run(mut self, mut recieve_cell_changes: CellChangeReceiver) {
         // recieve updates, and buffer them
+        println!("Starting canvas manager");
 
         let mut changed;
         loop {
@@ -86,10 +104,13 @@ impl AppState {
                         changed = true;
                     }
                     _ = &mut timeout => {
+                        // breaking so we need to empty the smaller_buffer
+                        println!("Size of smaller buffer {}", smaller_buffer.len());
                         break;
                     }
                 }
             }
+
             if !changed {
                 println!("no changes, skipping");
                 continue;
@@ -98,19 +119,22 @@ impl AppState {
             // buffer and board are chunks, only the non-zero buffer values need to be set in the board
             // only take the last of each unique indes
             let mut last_changes: Vec<PackedCell> = Vec::with_capacity(smaller_buffer.len());
-            for change in smaller_buffer {
-                if let Some(last_change) = last_changes
-                    .iter_mut()
-                    .find(|c| c.index() == change.index())
-                {
-                    *last_change = change;
-                } else {
-                    last_changes.push(change);
+            {
+                for change in smaller_buffer {
+                    if let Some(last_change) = last_changes
+                        .iter_mut()
+                        .find(|c| c.index() == change.index())
+                    {
+                        *last_change = change;
+                    } else {
+                        last_changes.push(change);
+                    }
                 }
             }
 
             // apply the changes to the board
             {
+                // let mut board = self.board.write().await;
                 let mut board = self.board.write().await;
 
                 for change in last_changes.iter() {
@@ -119,6 +143,7 @@ impl AppState {
             }
 
             self.broadcast(last_changes);
+            // self.broadcast(last_changes);
         }
     }
 
@@ -146,45 +171,53 @@ async fn main() {
         .with_target(false)
         .init();
 
-    let (sender, receiver) = broadcast::channel(1_000_000);
+    let (broadcast_sender, boardcast_receiver) = broadcast::channel(1_000);
+    let (manager_sender, manager_receiver) = mpsc::channel::<shared_lib::PackedCell>(1_000);
 
-    let (manager_sender, manager_receiver) = mpsc::channel::<shared_lib::PackedCell>(1_000_000);
-
-    let state = AppState::new(sender);
+    let canvas_manager = CanvasManager::new(broadcast_sender);
+    let state = AppState {
+        board: canvas_manager.board.clone(),
+        connections: Arc::new(AtomicUsize::new(0)),
+    };
 
     // spawn a task to flush the buffer every second
-    let state_clone = state.clone();
     tokio::spawn(async move {
-        state_clone.run(manager_receiver).await;
+        canvas_manager.run(manager_receiver).await;
     });
 
     // Spawn a task to handle board state requests
-    let (board_request_tx, mut board_request_rx) =
-        mpsc::channel::<oneshot::Sender<Arc<RwLock<Chunk>>>>(2);
-    let board_clone = state.board.clone();
-    tokio::spawn(async move {
-        while let Some(reply_tx) = board_request_rx.recv().await {
-            let board = board_clone.clone();
-            let _ = reply_tx.send(board);
-        }
-    });
+    // let (board_request_tx, mut board_request_rx) =
+    //     mpsc::channel::<oneshot::Sender<Arc<RwLock<Chunk>>>>(2);
+    // let board_clone = state.board.clone();
+    // tokio::spawn(async move {
+    //     while let Some(reply_tx) = board_request_rx.recv().await {
+    //         let board = board_clone.clone();
+    //         let _ = reply_tx.send(board);
+    //     }
+    // });
 
     // build our application with some routes
-    let app = Router::new()
+    let socket_router = Router::new()
         .route_service("/", ServeFile::new("public/index.html"))
         .route("/ws", get(ws_handler))
+        .route("/board", get(get_board))
+        .route("/connections", get(get_connections))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         )
-        .layer(Extension(Receiver(receiver)))
+        .layer(Extension(Receiver(boardcast_receiver)))
         .layer(Extension(UpdateTransmitter(manager_sender)))
-        .layer(Extension(board_request_tx));
+        .with_state(state);
+    // .layer(Extension(board_request_tx))
+
+    // let state_router = Router::new().route("/", get(get_board)).with_state(state);
+    // let app = socket_router.nest_service("/board", state_router);
+
+    let app = socket_router;
 
     // run it with hyper
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     debug!("listening on {}", listener.local_addr().unwrap());
 
     axum::serve(
@@ -195,45 +228,46 @@ async fn main() {
     .unwrap();
 }
 
+async fn get_connections(State(state): State<AppState>) -> String {
+    format!(
+        "Connections {}",
+        state.connections.load(std::sync::atomic::Ordering::Relaxed)
+    )
+}
+
+async fn get_board(State(board): State<AppState>) -> Vec<u8> {
+    let board = board.board.read().await;
+
+    // return the board in binary
+    let board_vec = board.to_vec();
+
+    drop(board);
+    return board_vec;
+}
+
 #[axum::debug_handler]
 async fn ws_handler(
     ws: WebSocketUpgrade,
     Extension(Receiver(reciever)): Extension<Receiver>,
     Extension(UpdateTransmitter(update_tx)): Extension<UpdateTransmitter>,
-    Extension(board_request_tx): Extension<BoardRequester>,
-    // State(state): State<AppState>,
+    // Extension(board_request_tx): Extension<BoardRequester>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
-    // finalize the upgrade process by returning upgrade callback.
-    // we can customize the callback by sending additional info such as address.
-
-    // let board = board.lock().unwrap().clone();
-
-    // ws.on_upgrade(move |socket| handle_socket(socket, reciever, update_tx, state))
-    ws.on_upgrade(move |socket| handle_socket(socket, reciever, update_tx, board_request_tx))
-    // let board = board.lock().unwrap().clone();
-
-    // ws.on_upgrade(move |socket| handle_socket(socket, reciever, update_tx))
+    ws.on_upgrade(move |socket| handle_socket(socket, reciever, update_tx, state))
 }
 
 async fn handle_socket(
     socket: WebSocket,
     mut state_receiver: NotifyCellChangeReceiver,
     update_tx: CellChangeSender,
-    board_request_tx: BoardRequester,
-    // state: AppState,
+    // board_request_tx: BoardRequester,
+    state: AppState,
 ) {
+    state
+        .connections
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     // handle the websocket
     let (mut sender, mut receiver) = socket.split();
-
-    {
-        // Request full board state using a oneshot channel
-        let (board_tx, board_rx) = oneshot::channel();
-        board_request_tx.send(board_tx).await.unwrap();
-
-        // Receive and send the full board state
-        let full_board = board_rx.await.unwrap();
-        send_full_board(full_board, &mut sender).await;
-    }
 
     let mut handler_receiver = tokio::spawn(async move {
         while let Some(msg) = receiver.next().await {
@@ -283,17 +317,25 @@ async fn handle_socket(
         loop {
             match state_receiver.recv().await {
                 Ok(packed_cells) => {
-                    match send_chunk_update(packed_cells, &mut sender).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            // try to reconnect?
-                            info!("error sending message: {:?}", e);
-                            return;
-                        }
+                    // Serialize the Vec<CellChangeMessage> into a binary format
+                    let mut buffer = Vec::with_capacity(packed_cells.len() * 8);
+                    // buffer.push(0x01); // 0x01 indicates chunk updates
+                    for packed_cell in packed_cells {
+                        buffer.extend_from_slice(&packed_cell.to_binary());
                     }
+
+                    sender.send(Message::Binary(buffer)).await.unwrap();
+                    // match send_chunk_update(packed_cells, &mut sender).await {
+                    //     Ok(_) => {}
+                    //     Err(e) => {
+                    //         // try to reconnect?
+                    //         error!("error sending message: {:?}", e);
+                    //         return;
+                    //     }
+                    // }
                 }
                 Err(e) => {
-                    info!("error receiving message: {:?}", e);
+                    error!("error receiving message: {:?}", e);
                     return;
                 }
             }
@@ -303,6 +345,7 @@ async fn handle_socket(
     });
 
     // If any one of the tasks exit, abort the other.
+
     tokio::select! {
         _ = &mut handler_receiver => {
             debug!("receiver task exited");
@@ -315,9 +358,13 @@ async fn handle_socket(
     }
 
     info!("socket closed");
+    // decrement the connections amount in appstate
+    state
+        .connections
+        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
 }
 
-async fn send_full_board(board: Arc<Chunk>, sender: &mut SplitSink<WebSocket, Message>) {
+async fn send_full_board(board: Chunk, sender: &mut SplitSink<WebSocket, Message>) {
     let mut board_message = Vec::with_capacity(BOARD_SIZE + 1);
     board_message.push(0x00); // 0x00 indicates full board
     board_message.extend_from_slice(&board.to_vec());
@@ -329,11 +376,35 @@ async fn send_chunk_update(
     sender: &mut SplitSink<WebSocket, Message>,
 ) -> Result<(), axum::Error> {
     // Serialize the Vec<CellChangeMessage> into a binary format
-    let mut buffer = Vec::with_capacity(packed_cells.len() * 8 + 1);
-    buffer.push(0x01); // 0x01 indicates chunk updates
+    let mut buffer = Vec::with_capacity(packed_cells.len() * 8);
+    // buffer.push(0x01); // 0x01 indicates chunk updates
     for packed_cell in packed_cells {
         buffer.extend_from_slice(&packed_cell.to_binary());
     }
 
     sender.send(Message::Binary(buffer)).await
 }
+
+// {
+//     // 2.0GB usage w 2000 clients
+//     let board = state.board.read().await;
+//     // let board = state.board.lock().await;
+//     let mut board_message = Vec::new();
+//     board_message.push(0x00); // 0x00 indicates full board
+//     board_message.extend_from_slice(&board.to_vec());
+//     sender.send(Message::Binary(board_message)).await.unwrap();
+//     sender.flush().await.unwrap();
+// }
+
+//     // 2.5GB usage w 2000 clients
+//     // // Request full board state using a oneshot channel
+//     // let (board_tx, board_rx) = oneshot::channel();
+//     // board_request_tx.send(board_tx).await.unwrap();
+
+//     // // Receive and send the full board state
+//     // let full_board = board_rx.await.unwrap().read().await.clone();
+//     // let mut board_message = Vec::with_capacity(BOARD_SIZE + 1);
+//     // board_message.push(0x00); // 0x00 indicates full board
+//     // board_message.extend_from_slice(&full_board.to_vec());
+//     // sender.send(Message::Binary(board_message)).await.unwrap();
+// }
