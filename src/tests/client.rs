@@ -8,6 +8,8 @@ use tungstenite::{
     Message,
 };
 
+use crate::types::*;
+
 const SERVER: &str = "ws://127.0.0.1:3001/ws";
 const TIMEOUT: u64 = 1000;
 
@@ -40,16 +42,16 @@ async fn spawn_client(who: usize) {
     let (mut sender, mut receiver) = ws_stream.split();
 
     //     // request the entire board,
-    let response = reqwest::get("http://localhost:3001/board").await.unwrap();
-    let board = response.bytes().await.unwrap();
+    // let response = reqwest::get("http://localhost:3001/board").await.unwrap();
+    // let board = response.bytes().await.unwrap();
 
-    // check if the frist 5 entries in the byte array are 0.
-    for entry in board.to_vec().iter().take(10) {
-        if entry == &0x20 {
-            println!("entry is 20")
-        }
-    }
-    drop(board);
+    // // check if the frist 5 entries in the byte array are 0.
+    // for entry in board.to_vec().iter().take(10) {
+    //     if entry == &0x20 {
+    //         println!("entry is 20")
+    //     }
+    // }
+    // drop(board);
 
     // //we can ping the server for start
     // sender
@@ -60,10 +62,10 @@ async fn spawn_client(who: usize) {
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
         loop {
-            let random_index = rand::random::<usize>() % shared_lib::BOARD_SIZE;
+            let random_index = rand::random::<usize>() % BOARD_SIZE;
             let random_color = rand::random::<u8>() % 9;
 
-            let packed_cell = shared_lib::PackedCell::new(random_index, random_color);
+            let packed_cell = PackedCell::new(random_index, random_color);
 
             // In any websocket error, break loop.
 
