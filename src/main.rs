@@ -6,10 +6,17 @@ use std::{
     time::Duration,
 };
 
-// use mimalloc::MiMalloc;
+use mimalloc::MiMalloc;
+
+// When alot of connections are made at the same time, default allocator doesn't release the memory at all.
+// https://github.com/hyperium/hyper/issues/1790#issuecomment-2170928353
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+// use jemallocator::Jemalloc;
 
 // #[global_allocator]
-// static GLOBAL: MiMalloc = MiMalloc;
+// static GLOBAL: Jemalloc = Jemalloc;
 
 use axum::{
     extract::{
