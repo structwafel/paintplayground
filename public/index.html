@@ -37,6 +37,14 @@
     </div>
     <canvas id="colorGrid"></canvas>
     <script>
+        const host = window.location.host;
+        // if it is secure use wss
+        if (window.location.protocol === 'https:') {
+            const websocketUrl = `wss://${host}/ws`;
+        }else{
+            const websocketUrl = `ws://${host}/ws`;
+        }
+
         let selectedColor = 'red';
         const colorMapping = {
             'grey': 0,
@@ -56,7 +64,7 @@
 
 
 
-        const socket = new WebSocket('ws://localhost:3000/ws');
+        const socket = new WebSocket(websocketUrl);
         socket.binaryType = "arraybuffer";
         const canvas = document.getElementById('colorGrid');
         const ctx = canvas.getContext('2d');
@@ -138,7 +146,7 @@
 
         async function fetchBoard() {
             // Fetch the board data as an ArrayBuffer
-            const response = await fetch("http://localhost:3000/board");
+            const response = await fetch("/board");
             const arrayBuffer = await response.arrayBuffer();
 
             // Create a DataView to read the binary data
