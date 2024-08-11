@@ -92,11 +92,11 @@ impl CanvasManager {
         println!("Starting canvas manager");
 
         let mut changed;
-        let mut save_to_disk_counter = 0;
+        // let mut save_to_disk_counter = 0;
         loop {
             let mut smaller_buffer = Vec::new();
             changed = false;
-            save_to_disk_counter += 1;
+            // save_to_disk_counter += 1;
             let timeout = time::sleep(Duration::from_secs(CLEAR_BUFFER_INTERVAL));
             tokio::pin!(timeout);
 
@@ -109,16 +109,15 @@ impl CanvasManager {
                     }
                     _ = &mut timeout => {
                         // breaking so we need to empty the smaller_buffer
-                        println!("Size of smaller buffer {}", smaller_buffer.len());
                         break;
                     }
                 }
             }
 
             if !changed {
-                println!("no changes, skipping");
                 continue;
             }
+            println!("Size of smaller buffer {}", smaller_buffer.len());
 
             // buffer and board are chunks, only the non-zero buffer values need to be set in the board
             // only take the last of each unique indes
@@ -146,13 +145,7 @@ impl CanvasManager {
                 }
             }
 
-            self.broadcast(last_changes);
-            // self.broadcast(last_changes);
-
-            // every 10 updates, save the board to disk
-            if save_to_disk_counter >= 10 {
-                save_to_disk_counter = 0;
-                // save the board to disk
+            {
                 println!("Saving board to disk");
                 let board = self.board.read().await;
                 let board = board.to_vec();
@@ -160,6 +153,15 @@ impl CanvasManager {
                     save_map_to_disk(board);
                 });
             }
+
+            self.broadcast(last_changes);
+            // self.broadcast(last_changes);
+
+            // every 10 updates, save the board to disk
+            // if save_to_disk_counter >= 10 {
+            // save_to_disk_counter = 0;
+            // save the board to disk
+            // }
         }
     }
 
@@ -170,8 +172,10 @@ impl CanvasManager {
 
 fn save_map_to_disk(map: Vec<u8>) {
     // create the canvas directory if it doesn't exist
+    println!("creating dir if no exist");
     std::fs::create_dir_all("canvas").unwrap();
 
+    println!("actual saving to file");
     let mut file = File::create("canvas/0-0-chunk.bin").unwrap();
     file.write_all(&map).unwrap();
 }

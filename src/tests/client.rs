@@ -8,7 +8,7 @@ use tungstenite::{
     Message,
 };
 
-const SERVER: &str = "ws://127.0.0.1:3000/ws";
+const SERVER: &str = "ws://127.0.0.1:3001/ws";
 const TIMEOUT: u64 = 1000;
 
 pub async fn spawn_clients(n: usize) {
@@ -40,7 +40,7 @@ async fn spawn_client(who: usize) {
     let (mut sender, mut receiver) = ws_stream.split();
 
     //     // request the entire board,
-    let response = reqwest::get("http://localhost:3000/board").await.unwrap();
+    let response = reqwest::get("http://localhost:3001/board").await.unwrap();
     let board = response.bytes().await.unwrap();
 
     // check if the frist 5 entries in the byte array are 0.
