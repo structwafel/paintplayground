@@ -20,7 +20,7 @@ use futures::{
 };
 use shared_lib::{PackedCell, BOARD_SIZE};
 use tokio::{
-    sync::{broadcast, mpsc, oneshot},
+    sync::{broadcast, mpsc, oneshot, RwLock},
     time,
 };
 use tower_http::{
@@ -41,7 +41,7 @@ type NotifyCellChangeSender = broadcast::Sender<Vec<PackedCell>>;
 type CellChangeReceiver = mpsc::Receiver<shared_lib::PackedCell>;
 type CellChangeSender = mpsc::Sender<shared_lib::PackedCell>;
 
-type BoardRequester = mpsc::Sender<oneshot::Sender<Chunk>>;
+type BoardRequester = mpsc::Sender<oneshot::Sender<Arc<Chunk>>>;
 
 type Color = u8;
 type Chunk = Box<[Color; BOARD_SIZE]>;
@@ -54,7 +54,7 @@ fn new_board() -> Chunk {
 #[derive(Debug, Clone)]
 struct AppState {
     // the game board
-    board: Arc<Mutex<Chunk>>,
+    board: Arc<RwLock<Chunk>>,
 
     // the broadcast sender to send messages to all clients
     client_sender: NotifyCellChangeSender,
@@ -63,12 +63,12 @@ struct AppState {
 impl AppState {
     fn new(sender: NotifyCellChangeSender) -> Self {
         Self {
-            board: Arc::new(Mutex::new(new_board())),
+            board: Arc::new(RwLock::new(new_board())),
             client_sender: sender,
         }
     }
 
-    async fn run(&mut self, mut recieve_cell_changes: CellChangeReceiver) {
+    async fn run(mut self, mut recieve_cell_changes: CellChangeReceiver) {
         // recieve updates, and buffer them
 
         let mut changed;
@@ -111,7 +111,7 @@ impl AppState {
 
             // apply the changes to the board
             {
-                let mut board = self.board.lock().unwrap();
+                let mut board = self.board.write().await;
 
                 for change in last_changes.iter() {
                     board[change.index()] = change.value();
@@ -153,17 +153,18 @@ async fn main() {
     let state = AppState::new(sender);
 
     // spawn a task to flush the buffer every second
-    let mut state_clone = state.clone();
+    let state_clone = state.clone();
     tokio::spawn(async move {
         state_clone.run(manager_receiver).await;
     });
 
     // Spawn a task to handle board state requests
-    let (board_request_tx, mut board_request_rx) = mpsc::channel::<oneshot::Sender<Chunk>>(100);
+    let (board_request_tx, mut board_request_rx) =
+        mpsc::channel::<oneshot::Sender<Arc<RwLock<Chunk>>>>(2);
     let board_clone = state.board.clone();
     tokio::spawn(async move {
         while let Some(reply_tx) = board_request_rx.recv().await {
-            let board = board_clone.lock().unwrap().clone();
+            let board = board_clone.clone();
             let _ = reply_tx.send(board);
         }
     });
@@ -218,21 +219,21 @@ async fn handle_socket(
     socket: WebSocket,
     mut state_receiver: NotifyCellChangeReceiver,
     update_tx: CellChangeSender,
-    board_request_tx: mpsc::Sender<oneshot::Sender<Chunk>>,
+    board_request_tx: BoardRequester,
     // state: AppState,
 ) {
     // handle the websocket
     let (mut sender, mut receiver) = socket.split();
 
-    // {
-    //     // Request full board state using a oneshot channel
-    //     let (board_tx, board_rx) = oneshot::channel();
-    //     board_request_tx.send(board_tx).await.unwrap();
+    {
+        // Request full board state using a oneshot channel
+        let (board_tx, board_rx) = oneshot::channel();
+        board_request_tx.send(board_tx).await.unwrap();
 
-    //     // Receive and send the full board state
-    //     let full_board = board_rx.await.unwrap();
-    //     send_full_board(&full_board, &mut sender).await;
-    // }
+        // Receive and send the full board state
+        let full_board = board_rx.await.unwrap();
+        send_full_board(full_board, &mut sender).await;
+    }
 
     let mut handler_receiver = tokio::spawn(async move {
         while let Some(msg) = receiver.next().await {
@@ -316,7 +317,7 @@ async fn handle_socket(
     info!("socket closed");
 }
 
-async fn send_full_board(board: Chunk, sender: &mut SplitSink<WebSocket, Message>) {
+async fn send_full_board(board: Arc<Chunk>, sender: &mut SplitSink<WebSocket, Message>) {
     let mut board_message = Vec::with_capacity(BOARD_SIZE + 1);
     board_message.push(0x00); // 0x00 indicates full board
     board_message.extend_from_slice(&board.to_vec());
