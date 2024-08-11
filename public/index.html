@@ -39,10 +39,11 @@
     <script>
         const host = window.location.host;
         // if it is secure use wss
+        var websocketUrl;
         if (window.location.protocol === 'https:') {
-            const websocketUrl = `wss://${host}/ws`;
+            websocketUrl = `wss://${host}/ws`;
         }else{
-            const websocketUrl = `ws://${host}/ws`;
+            websocketUrl = `ws://${host}/ws`;
         }
 
         let selectedColor = 'red';
