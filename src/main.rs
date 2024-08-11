@@ -1,4 +1,6 @@
 use std::{
+    fs::File,
+    io::{Read, Write},
     net::SocketAddr,
     sync::{atomic::AtomicUsize, Arc},
     time::Duration,
@@ -78,9 +80,9 @@ struct CanvasManager {
 }
 
 impl CanvasManager {
-    fn new(sender: NotifyCellChangeSender) -> Self {
+    fn new(board: Chunk, sender: NotifyCellChangeSender) -> Self {
         Self {
-            board: new_board(),
+            board: Arc::new(RwLock::new(board)),
             client_sender: sender,
         }
     }
@@ -90,9 +92,11 @@ impl CanvasManager {
         println!("Starting canvas manager");
 
         let mut changed;
+        let mut save_to_disk_counter = 0;
         loop {
             let mut smaller_buffer = Vec::new();
             changed = false;
+            save_to_disk_counter += 1;
             let timeout = time::sleep(Duration::from_secs(CLEAR_BUFFER_INTERVAL));
             tokio::pin!(timeout);
 
@@ -144,12 +148,53 @@ impl CanvasManager {
 
             self.broadcast(last_changes);
             // self.broadcast(last_changes);
+
+            // every 10 updates, save the board to disk
+            if save_to_disk_counter >= 10 {
+                save_to_disk_counter = 0;
+                // save the board to disk
+                println!("Saving board to disk");
+                let board = self.board.read().await;
+                let board = board.to_vec();
+                tokio::spawn(async move {
+                    save_map_to_disk(board);
+                });
+            }
         }
     }
 
     fn broadcast(&mut self, messages: Vec<PackedCell>) {
         self.client_sender.send(messages).unwrap();
     }
+}
+
+fn save_map_to_disk(map: Vec<u8>) {
+    // create the canvas directory if it doesn't exist
+    std::fs::create_dir_all("canvas").unwrap();
+
+    let mut file = File::create("canvas/0-0-chunk.bin").unwrap();
+    file.write_all(&map).unwrap();
+}
+
+fn load_map_from_disk() -> Chunk {
+    let file = match File::open("canvas/0-0-chunk.bin") {
+        Ok(f) => f,
+        Err(_) => return new_chunk(),
+    };
+
+    let mut reader = std::io::BufReader::new(file);
+    let mut buffer = Vec::with_capacity(BOARD_SIZE);
+    reader.read_to_end(&mut buffer).unwrap();
+
+    // Ensure the buffer has the correct length
+    if buffer.len() != BOARD_SIZE {
+        return new_chunk();
+    }
+
+    // Convert the Vec to an array
+    let array: Box<[u8; BOARD_SIZE]> = buffer.try_into().expect("Buffer length mismatch");
+
+    array
 }
 
 struct Receiver(NotifyCellChangeReceiver);
@@ -174,7 +219,10 @@ async fn main() {
     let (broadcast_sender, boardcast_receiver) = broadcast::channel(1_000);
     let (manager_sender, manager_receiver) = mpsc::channel::<shared_lib::PackedCell>(1_000);
 
-    let canvas_manager = CanvasManager::new(broadcast_sender);
+    // load board from disk
+    let board = load_map_from_disk();
+
+    let canvas_manager = CanvasManager::new(board, broadcast_sender);
     let state = AppState {
         board: canvas_manager.board.clone(),
         connections: Arc::new(AtomicUsize::new(0)),
