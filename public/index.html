@@ -24,7 +24,7 @@
         <div id="color-picker">
             <button id="grey">Grey- do not use</button>
             <button id="red">Red</button>
-            <button id="breen">Green</button>
+            <button id="green">Green</button>
             <button id="blue">Blue</button>
             <button id="yellow">Yellow</button>
             <button id="purple">Purple</button>
@@ -42,7 +42,7 @@
         var websocketUrl;
         if (window.location.protocol === 'https:') {
             websocketUrl = `wss://${host}/ws`;
-        }else{
+        } else {
             websocketUrl = `ws://${host}/ws`;
         }
 
@@ -96,14 +96,32 @@
             }
         }
         function handleScroll(event) {
-            if (event.shiftKey) {
-                offsetX = Math.max(0, Math.min(gridWidth * cellSize - canvas.width, offsetX + event.deltaY));
+            if (event.shiftKey || (Math.abs(event.deltaX) > Math.abs(event.deltaY))) {
+                // Horizontal scrolling
+                offsetX = Math.max(0, Math.min(gridWidth * cellSize - canvas.width, offsetX + event.deltaX));
             } else {
+                // Vertical scrolling
                 offsetY = Math.max(0, Math.min(gridHeight * cellSize - canvas.height, offsetY + event.deltaY));
             }
             drawGrid();
         }
-        function handleClick(event) {
+        let isMouseDown = false;
+
+        function handleMouseDown(event) {
+            isMouseDown = true;
+            handleColoring(event);
+        }
+
+        function handleMouseMove(event) {
+            if (isMouseDown) {
+                handleColoring(event);
+            }
+        }
+
+        function handleMouseUp(event) {
+            isMouseDown = false;
+        }
+        function handleColoring(event) {
             const rect = canvas.getBoundingClientRect();
             const x = event.clientX - rect.left + offsetX;
             const y = event.clientY - rect.top + offsetY;
@@ -123,7 +141,10 @@
             socket.send(data.buffer);
         }
         canvas.addEventListener('wheel', handleScroll);
-        canvas.addEventListener('click', handleClick);
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('mouseleave', handleMouseUp); // To handle the case when the mouse leaves the canvas
 
         drawGrid();
 
@@ -187,7 +208,7 @@
                 case 9:
                     return 'black';
                 default:
-                    return 'white';
+                    return 'grey';
             }
         }
 
