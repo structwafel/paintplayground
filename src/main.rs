@@ -1,7 +1,4 @@
-use std::{
-    net::SocketAddr,
-    sync::{atomic::AtomicUsize, Arc},
-};
+use std::{net::SocketAddr, sync::atomic::AtomicUsize};
 
 use chunk_db::SimpleToFileSaver;
 use mimalloc::MiMalloc;
@@ -74,7 +71,7 @@ async fn main() {
         .with_target(false)
         .init();
 
-    let chunk_saver = Arc::new(SimpleToFileSaver {});
+    let chunk_saver = SimpleToFileSaver {};
 
     // start THE BoardManager
     let board_manager_communicator = board_manager::BoardManager::start(chunk_saver);

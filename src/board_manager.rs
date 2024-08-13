@@ -1,10 +1,7 @@
-use std::sync::{
-    atomic::{AtomicBool, AtomicI64, AtomicU64},
-    Arc,
-};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use crate::{
-    chunk_db::{ChunkLoaderSaver, ChunkLoaderSavers},
+    chunk_db::ChunkLoaderSaver,
     chunk_manager::{ChunkManager, ChunkUpdate, HandlerData},
     types::*,
 };
@@ -63,20 +60,23 @@ impl BoardManagerCommunicator {
 }
 
 #[derive(Debug)]
-pub struct BoardManager {
+pub struct BoardManager<T>
+where
+    T: ChunkLoaderSaver + 'static,
+{
     /// the chunks currently managed my the BoardManager
     chunks: dashmap::DashMap<ChunkCoordinates, HandlerData>,
 
     /// The manager for updating the chunks, this is given to each chunk manager
-    chunks_loader_saver: Arc<dyn ChunkLoaderSaver>,
+    chunks_loader_saver: Arc<T>,
 
     // limit how many chunks are loaded at the same time
     chunks_loaded: AtomicU64,
 
     /// The chunk manager will tell the BoardManager when it needs to be removed from chunks.
-    chunk_updates_rx: mpsc::Receiver<ChunkUpdate>,
-    /// Give theses updates to the chunk manager, when creating them
-    chunk_updates_tx: mpsc::Sender<ChunkUpdate>,
+    chunk_m_updates_rx: mpsc::Receiver<ChunkUpdate>,
+    /// Pass to ChunkManager when creating to be able to receive updates
+    chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
 
     /// The board manager receives messages from BoardManagerCommunicator
     board_manager_rx: tokio::sync::mpsc::Receiver<BoardManagerMessage>,
@@ -86,33 +86,21 @@ pub struct BoardManager {
     id: AtomicI64,
 }
 
-// impl Clone for BoardManager {
-//     fn clone(&self) -> Self {
-//         Self {
-//             chunks: self.chunks.clone(),
-//             chunks_loaded: AtomicU64::new(self.chunks_loaded()),
-
-//             chunks_loader_saver: self.chunks_loader_saver.clone(),
-
-//             // chunk_updates_rx: self.chunk_updates_rx.clone(),
-//             #[cfg(test)]
-//             id: AtomicI64::new(self.id.load(std::sync::atomic::Ordering::SeqCst)),
-//         }
-//     }
-// }
-
-impl BoardManager {
-    pub fn start(chunks_loader_saver: Arc<dyn ChunkLoaderSaver>) -> BoardManagerCommunicator {
+impl<T> BoardManager<T>
+where
+    T: ChunkLoaderSaver + 'static,
+{
+    pub fn start(chunks_loader_saver: T) -> BoardManagerCommunicator {
         let (board_manager_tx, board_manager_rx) = tokio::sync::mpsc::channel(100);
         let (chunk_updates_tx, chunk_updates_rx) = mpsc::channel(100);
 
         let board_manager = Self {
             chunks: dashmap::DashMap::new(),
             chunks_loaded: 0.into(),
-            chunks_loader_saver,
-            chunk_updates_rx,
+            chunks_loader_saver: Arc::new(chunks_loader_saver),
+            chunk_m_updates_rx: chunk_updates_rx,
             board_manager_rx,
-            chunk_updates_tx,
+            chunk_m_updates_tx: chunk_updates_tx,
 
             #[cfg(test)]
             id: 0.into(),
@@ -133,15 +121,64 @@ impl BoardManager {
 
     async fn run(mut self) {
         loop {
+            tokio::select! {
+                // The BoardManagerCommunicator wants to talk to you
+                message=self.board_manager_rx.recv()=>{
+                    match message {
+                        Some(BoardManagerMessage::GetChunk(coordinates, request_type, sender)) => {
+                            let chunk = self.read_chunk(coordinates, request_type).await;
+                            let _ = sender.send(chunk);
+                        }
+                        Some(BoardManagerMessage::GetHandler(coordinates, sender)) => {
+                            let handler = self.get_chunk_handler(coordinates);
+                            let _ = sender.send(handler);
+                        }
+                        None => {
+                            panic!("Board manager is closed")
+                        }
+                    }
+                }
+                // The chunk wants to talk to you
+                msg = self.chunk_m_updates_rx.recv()=>{
+                    match msg {
+                        Some(f) => match f {
+                            ChunkUpdate::Clear(coords) => {
+                                // remove this ChunkManager from the Map of active chunks.
+                                // ! it needs to save itself before sending this message
+                                let _ = self.chunks.remove(&coords);
+                            }
+                            ChunkUpdate::Save => {
+                                // ? Is probably better if Chunks just save themselves instead of the BoardManager
+                            }
+                        },
+                        None => panic!("Board manager is holding a sender, yet all senders are dropped?"),
+                    }
+                }
+
+            }
+            match self.chunk_m_updates_rx.recv().await {
+                Some(f) => match f {
+                    ChunkUpdate::Clear(coords) => {
+                        // remove this ChunkManager from the Map of active chunks.
+                        // ! it needs to save itself before sending this message
+                        let _ = self.chunks.remove(&coords);
+                    }
+                    ChunkUpdate::Save => {
+                        // ? Is probably better if Chunks just save themselves instead of the BoardManager
+                    }
+                },
+                None => panic!("Board manager is holding a sender, yet all senders are dropped?"),
+            }
+
             match self.board_manager_rx.recv().await {
                 Some(message) => match message {
                     BoardManagerMessage::GetChunk(coordinates, request_type, sender) => {
                         let chunk = self.read_chunk(coordinates, request_type).await;
-                        sender.send(chunk);
+                        let _ = sender.send(chunk); // if receiver is dropped, the application is probably dead
                     }
                     BoardManagerMessage::GetHandler(coordinates, sender) => {
                         let handler = self.get_chunk_handler(coordinates);
-                        sender.send(handler);
+                        let _ = sender.send(handler); // if receiver is dropped, the application is probably dead
                     }
                 },
                 None => break,
@@ -179,6 +216,7 @@ impl BoardManager {
                     Ok(ChunkManager::new(
                         coordinates,
                         self.chunks_loader_saver.clone(),
+                        self.chunk_m_updates_tx.clone(),
                     ))
                 } else {
                     // return Error::TooManyChunksLoaded;
@@ -192,29 +230,5 @@ impl BoardManager {
 
     fn chunks_loaded(&self) -> u64 {
         self.chunks_loaded.load(std::sync::atomic::Ordering::SeqCst)
-    }
-
-    #[cfg(test)]
-    fn get_or_create_chunkmanager(
-        &self,
-        coordinates: ChunkCoordinates,
-        id: i64,
-    ) -> ChunkCoordinates {
-        let mut inserted_id = None;
-        let chunk = self.chunks.entry(coordinates).or_insert_with(|| {
-            println!("creating new chunk manager for {:?}", id);
-            inserted_id = Some(id);
-
-            ChunkManager::new(
-                ChunkCoordinates::new(id, id),
-                self.chunks_loader_saver.clone(),
-            )
-        });
-
-        if let Some(id) = inserted_id {
-            self.id.store(id, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        chunk.key().clone()
     }
 }

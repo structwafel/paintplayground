@@ -8,7 +8,6 @@ pub use tokio::sync::mpsc;
 pub use tokio::sync::oneshot;
 
 // re-export common used types
-pub use crate::board_manager::ChunkRequest;
 
 // pub type BoardRequester = mpsc::Sender<oneshot::Sender<Arc<RwLock<Chunk>>>>;
 

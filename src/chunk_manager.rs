@@ -1,23 +1,28 @@
-use std::time::Duration;
+use std::{error::Error, time::Duration};
+
+use tracing::error;
 
 use crate::{chunk_db::ChunkLoaderSaver, types::*};
 
 pub enum ChunkUpdate {
     /// The chunk manager doesn't have any clients, and can be removed
-    Clear,
+    Clear(ChunkCoordinates),
     /// Enough updates have been made to the chunk, and it should be saved
     Save,
 }
 
 #[derive(Debug)]
-pub struct ChunkManager {
+pub struct ChunkManager<T>
+where
+    T: ChunkLoaderSaver + 'static,
+{
     /// for which coordinates this chunk is
     coordinates: ChunkCoordinates,
 
     /// data of the chunk
     chunk: Chunk,
     /// chunk saver
-    chunk_saver: Arc<dyn ChunkLoaderSaver>,
+    chunk_saver: Arc<T>,
 
     /// broadcast updates to all websockets connections
     broadcaster_tx: broadcast::Sender<Vec<PackedCell>>,
@@ -28,15 +33,25 @@ pub struct ChunkManager {
     chunk_requester_rx: mpsc::Receiver<oneshot::Sender<Chunk>>,
     /// Pinging to know if the ChunkManager is still alive
     ping_chunk_requester_rx: mpsc::Receiver<oneshot::Sender<()>>,
+
+    /// Send a message to the BoardManager, to tell you are ded.
+    chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
+
+    /// Keep track when was the last change, or if no changes: when it started
+    last_change: std::time::Instant,
 }
 
-impl ChunkManager {
+impl<T> ChunkManager<T>
+where
+    T: ChunkLoaderSaver + 'static,
+{
     /// Create a new chunk manager
     ///
     /// And start it in a new thread, where it will handle updates to/from the chunk
     pub fn new(
         coordinates: ChunkCoordinates,
-        chunk_saver: Arc<dyn ChunkLoaderSaver>,
+        chunk_saver: Arc<T>,
+        chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
     ) -> HandlerData {
         let (update_tx, update_rx) = mpsc::channel(100);
         let (broadcaster_tx, broadcast_rx) = broadcast::channel(10);
@@ -59,10 +74,8 @@ impl ChunkManager {
             update_rx,
             chunk_requester_rx,
             ping_chunk_requester_rx,
-            // handler_data: HandlerData {
-            // broadcast_rx,
-            // update_tx,
-            // },
+            chunk_m_updates_tx,
+            last_change: std::time::Instant::now(),
         };
 
         tokio::spawn(async move { chunk_manager.run().await });
@@ -74,9 +87,9 @@ impl ChunkManager {
     //     self.handler_data.clone()
     // }
 
-    pub fn coordinates(&self) -> ChunkCoordinates {
-        self.coordinates
-    }
+    // pub fn coordinates(&self) -> ChunkCoordinates {
+    //     self.coordinates
+    // }
 
     pub fn chunk(&self) -> &Chunk {
         &self.chunk
@@ -117,6 +130,13 @@ impl ChunkManager {
             }
 
             if !changed {
+                // check if there are connections
+                if self.no_connections() {
+                    // check if there have been no changes past 5 minutes
+                    if self.last_change.elapsed().as_secs() > 60 * 5 {
+                        break;
+                    }
+                }
                 continue;
             }
             println!("Size of smaller buffer {}", smaller_buffer.len());
@@ -156,10 +176,52 @@ impl ChunkManager {
             // broadcast the changes made to all the clients
             self.broadcast(last_changes);
         }
+
+        // loop is stopped, lets destroy ourselves
+        match self.delete_yourself().await {
+            Ok(_) => (),
+            Err(error) => {
+                // what do we do now?
+                error!("I want to delete myself, but i errored doing so");
+                panic!("{:?}", error);
+                // self.run().await;
+            }
+        }
     }
 
     fn broadcast(&mut self, messages: Vec<PackedCell>) {
         self.broadcaster_tx.send(messages).unwrap();
+    }
+
+    async fn delete_yourself(&self) -> Result<(), Box<dyn Error>> {
+        // check if there are no websockets connected to you
+        if self.update_rx.sender_weak_count() > 0 {
+            return Err("There are senders".into());
+        }
+
+        // send request to BoardManager to remove yourself
+        // if errors everything is ded
+        let _ = self
+            .chunk_m_updates_tx
+            .send(ChunkUpdate::Clear(self.coordinates))
+            .await?;
+
+        // save the chunk, One LAST TIME
+        self.chunk_saver
+            .save_chunk(self.chunk.clone(), self.coordinates);
+
+        // You can stop now
+        return Ok(());
+    }
+
+    fn connections_quantity(&self) -> usize {
+        self.chunk_requester_rx.sender_strong_count()
+    }
+    fn has_connections(&self) -> bool {
+        self.connections_quantity() > 0
+    }
+    fn no_connections(&self) -> bool {
+        !self.has_connections()
     }
 }
 

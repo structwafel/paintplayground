@@ -1,5 +1,6 @@
 use crate::types::*;
 
+// todo, these should probably return errors
 pub trait ChunkLoaderSaver: Send + Sync + Debug {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
     fn load_chunk(&self, coordinates: ChunkCoordinates) -> Option<Chunk>;
