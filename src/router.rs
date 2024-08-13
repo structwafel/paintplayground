@@ -1,15 +1,10 @@
 use axum::{
-    extract::{Path, Query, State},
-    response::IntoResponse,
+    extract::{Path, State},
     routing::get,
-    Extension, Router,
-};
-use tokio::sync::{
-    broadcast::{self, Receiver},
-    mpsc,
+    Router,
 };
 use tower_http::{
-    services::ServeFile,
+    services::{ServeDir, ServeFile},
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
@@ -19,7 +14,8 @@ use crate::AppState;
 
 pub fn all_routes(state: AppState) -> Router {
     Router::new()
-        .route_service("/", ServeFile::new("public/index.html"))
+        .nest_service("/", ServeDir::new("public"))
+        .nest_service("/js", ServeDir::new("js"))
         .route("/ws/:x/:y", get(crate::ws::ws_handler))
         .route("/chunk/:x/:y", get(get_chunk))
         .route("/connections", get(get_connections))
