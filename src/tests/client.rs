@@ -62,7 +62,7 @@ async fn spawn_client(who: usize) {
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
         loop {
-            let random_index = rand::random::<usize>() % BOARD_SIZE;
+            let random_index = rand::random::<usize>() % 100;
             let random_color = rand::random::<u8>() % 9;
 
             let packed_cell = PackedCell::new(random_index, random_color);

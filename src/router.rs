@@ -1,4 +1,9 @@
-use axum::{extract::State, routing::get, Extension, Router};
+use axum::{
+    extract::{Path, Query, State},
+    response::IntoResponse,
+    routing::get,
+    Extension, Router,
+};
 use tokio::sync::{
     broadcast::{self, Receiver},
     mpsc,
@@ -8,26 +13,20 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
-use crate::types;
+use crate::board_manager::ChunkRequest;
 use crate::types::*;
 use crate::AppState;
 
-pub fn all_routes(
-    state: AppState,
-    boardcast_receiver: broadcast::Receiver<Vec<PackedCell>>,
-    manager_sender: mpsc::Sender<PackedCell>,
-) -> Router {
+pub fn all_routes(state: AppState) -> Router {
     Router::new()
         .route_service("/", ServeFile::new("public/index.html"))
-        .route("/ws", get(crate::ws::ws_handler))
-        .route("/board", get(get_board))
+        .route("/ws/:x/:y", get(crate::ws::ws_handler))
+        .route("/chunk/:x/:y", get(get_chunk))
         .route("/connections", get(get_connections))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         )
-        .layer(Extension(types::Receiver(boardcast_receiver)))
-        .layer(Extension(UpdateTransmitter(manager_sender)))
         .with_state(state)
 }
 
@@ -38,12 +37,19 @@ async fn get_connections(State(state): State<AppState>) -> String {
     )
 }
 
-async fn get_board(State(board): State<AppState>) -> Vec<u8> {
-    let board = board.board.read().await;
+#[axum::debug_handler]
+async fn get_chunk(Path((x, y)): Path<(i64, i64)>, State(state): State<AppState>) -> Vec<u8> {
+    // check based on the user if they are allowed to get these coordinates
+    let coordinates = ChunkCoordinates::new(x, y);
 
-    // return the board in binary
-    let board_vec = board.to_vec();
+    let Some(chunk) = state
+        .board_communicator
+        .get_chunk(coordinates, ChunkRequest::Storage)
+        .await
+    else {
+        return vec![];
+    };
 
-    drop(board);
-    return board_vec;
+    // return the chunk in binary
+    return chunk.clone().into();
 }

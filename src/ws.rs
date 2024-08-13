@@ -1,151 +1,205 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        Path, State, WebSocketUpgrade,
     },
     response::IntoResponse,
-    Extension,
 };
-use futures::{sink::SinkExt, stream::StreamExt};
-use tracing::{debug, error, info};
+use futures::{
+    sink::SinkExt,
+    stream::{SplitSink, SplitStream, StreamExt},
+};
+use tracing::{debug, info};
 
-use crate::types::*;
-use crate::{AppState, CellChangeSender, NotifyCellChangeReceiver};
+use crate::AppState;
+use crate::{board_manager, types::*};
 
 #[axum::debug_handler]
 pub async fn ws_handler(
+    Path((x, y)): Path<(i64, i64)>,
     ws: WebSocketUpgrade,
-    Extension(crate::Receiver(reciever)): Extension<crate::Receiver>,
-    Extension(crate::UpdateTransmitter(update_tx)): Extension<crate::UpdateTransmitter>,
-    // Extension(board_request_tx): Extension<BoardRequester>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    // todo, check if the user is allowed to connect to this chunk
+    let coordinates = ChunkCoordinates::new(x, y);
+
     // upgrade the request to a websocket
-    ws.on_upgrade(move |socket| handle_socket(socket, reciever, update_tx, state))
+    ws.on_upgrade(move |socket| handle_socket(socket, coordinates, state))
 }
 
-async fn handle_socket(
-    socket: WebSocket,
-    mut state_receiver: NotifyCellChangeReceiver,
-    update_tx: CellChangeSender,
-    // board_request_tx: BoardRequester,
-    state: AppState,
-) {
-    state
-        .connections
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+struct WebSocketHandler {
+    coordinates: ChunkCoordinates,
+    broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
+    update_tx: mpsc::Sender<PackedCell>,
 
-    // handle the websocket
-    let (mut sender, mut receiver) = socket.split();
+    // split websocket
+    sender: SplitSink<WebSocket, Message>,
+    receiver: SplitStream<WebSocket>,
+}
 
-    // ! problematic_code
-    // ! sending the message through websocket keeps memory allocated.
-    // ! afaik, sender is not doing things properly.
-    // ! the Vec::with_capacity(BOARD_SIZE + 1) is not released,
-    {
-        // let board = state.board.read().await.clone();
+impl WebSocketHandler {
+    // possibly returns websocket to be able to do stuff with it
+    async fn connect(
+        state: &AppState,
+        mut socket: WebSocket,
+        coordinates: ChunkCoordinates,
+    ) -> Result<Self, WebSocket> {
+        // try to get the chunk
+        let handler_data = match state.board_communicator.get_handler(coordinates).await {
+            Err(err) => match err {
+                // if there are too many chunks loaded, tell the client
+                board_manager::Error::TooManyChunksLoaded => {
+                    let message = WsMessages::too_many_chunks_buffer();
+                    socket.send(Message::Binary(message)).await.unwrap();
+                    return Err(socket);
+                }
+            },
+            Ok(c) => c,
+        };
 
-        // let mut board_message = Vec::with_capacity(BOARD_SIZE + 1);
-        // board_message.push(0x00); // 0x00 indicates full board
-        // board_message.extend_from_slice(&board[..BOARD_SIZE / 10].to_vec());
+        // request the chunk from the chunk manager
+        // you could also request the chunk from the board_manager
+        // let chunk = state
+        //     .board_communicator
+        //     .get_chunk(coordinates, ChunkRequest::Live)
+        //     .await;
+        let chunk = handler_data.fetch_chunk().await;
 
-        // sender.send(Message::Binary(board_message)).await.unwrap();
+        // send the chunk to the client
+        let message = WsMessages::entire_chunk_buffer(chunk);
+        socket.send(Message::Binary(message)).await.unwrap();
+
+        let (sender, receiver) = socket.split();
+
+        Ok(Self {
+            coordinates,
+            broadcast_rx: handler_data.broadcast_rx,
+            update_tx: handler_data.update_tx,
+            sender,
+            receiver,
+        })
     }
-    // todo, send only the chunk requested. Is annoying to keep track of which chunks the client is looking at.
-    // todo, non dymanic chunks, ui shows you navigation to go to the next chunk.
-    // todo, ^ this still needs the update vec to include for which chunk it was meant.
 
-    let mut handler_receiver = tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            info!("received message: {:?}", msg);
-            let msg = match msg {
-                Ok(msg) => msg,
-                Err(e) => {
-                    info!("error receiving message: {:?}", e);
-                    continue;
-                }
-            };
+    async fn run(self) {
+        let mut receiver_handler = Self::start_receiver(self.receiver, self.update_tx);
+        let mut sender_handler = Self::start_sender(self.sender, self.broadcast_rx);
 
-            match msg {
-                // we can ignore ping, handled by axum
-                axum::extract::ws::Message::Ping(_) => {
-                    continue;
-                }
-                axum::extract::ws::Message::Text(_) => todo!(),
-                axum::extract::ws::Message::Binary(data) => {
-                    if data.len() == 8 {
-                        let packed_value = u64::from_le_bytes(data.try_into().unwrap());
-                        let index = (packed_value >> 4) as usize;
-                        let color_number = (packed_value & 0xF) as u8;
-
-                        let packed_cell = PackedCell::new(index, color_number);
-
-                        // Send message to the AppState
-                        update_tx.send(packed_cell).await.unwrap();
-                    } else {
-                        info!("invalid binary message length: {:?}", data.len());
-                        // todo, pehaps a "resync" with the boardRequester
-                    }
-                }
-                axum::extract::ws::Message::Pong(_) => todo!(),
-                axum::extract::ws::Message::Close(_) => {
-                    info!("client closed the connection");
-                    break;
-                }
+        tokio::select! {
+            _ = &mut receiver_handler => {
+                debug!("receiver task exited");
+                sender_handler.abort();
+            }
+            _ = &mut sender_handler => {
+                debug!("sender task exited");
+                receiver_handler.abort();
             }
         }
-    });
+        return;
+    }
 
-    // Receive messages from the CanvasManager and send them to the client
-    //
-    // The messages will be the buffered changes
-    let mut handler_sender = tokio::spawn(async move {
-        loop {
-            match state_receiver.recv().await {
-                Ok(packed_cells) => {
-                    // Serialize the Vec<CellChangeMessage> into a binary format
-                    let mut buffer = Vec::with_capacity(packed_cells.len() * 8);
-                    // buffer.push(0x01); // 0x01 indicates chunk updates
-                    for packed_cell in packed_cells {
-                        buffer.extend_from_slice(&packed_cell.to_binary());
+    fn start_receiver(
+        mut receiver: SplitStream<WebSocket>,
+        update_tx: mpsc::Sender<PackedCell>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            while let Some(msg) = receiver.next().await {
+                info!("received message: {:?}", msg);
+                let msg = match msg {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        info!("error receiving message: {:?}", e);
+                        continue;
                     }
+                };
 
-                    sender.send(Message::Binary(buffer)).await.unwrap();
-                    // match send_chunk_update(packed_cells, &mut sender).await {
-                    //     Ok(_) => {}
-                    //     Err(e) => {
-                    //         // try to reconnect?
-                    //         error!("error sending message: {:?}", e);
-                    //         return;
-                    //     }
-                    // }
-                }
-                Err(e) => {
-                    error!("error receiving message: {:?}", e);
-                    return;
+                match msg {
+                    axum::extract::ws::Message::Binary(data) => {
+                        if data.len() == 8 {
+                            let packed_value = u64::from_le_bytes(data.try_into().unwrap());
+                            let index = (packed_value >> 4) as usize;
+                            let color_number = (packed_value & 0xF) as u8;
+
+                            let packed_cell = PackedCell::new(index, color_number);
+
+                            // Send message to the AppState
+                            update_tx.send(packed_cell).await.unwrap();
+                        } else {
+                            info!("invalid binary message length: {:?}", data.len());
+                            // todo, pehaps a "resync" with the boardRequester
+                        }
+                    }
+                    // we can ignore ping, handled by axum
+                    axum::extract::ws::Message::Ping(_) => {}
+                    axum::extract::ws::Message::Text(_) => {}
+                    axum::extract::ws::Message::Pong(_) => {}
+                    axum::extract::ws::Message::Close(_) => {
+                        info!("client closed the connection");
+                        break;
+                    }
                 }
             }
+        })
+    }
+
+    /// Receive messages from the [`ChunkManager`](crate::chunk_manager::ChunkManager) and send them to the client
+    ///
+    /// The messages will be the buffered changes
+    fn start_sender(
+        mut sender: SplitSink<WebSocket, Message>,
+        mut broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            loop {
+                match broadcast_rx.recv().await {
+                    Ok(packed_cells) => {
+                        let message = WsMessages::chunk_update_buffer(packed_cells);
+
+                        sender.send(Message::Binary(message)).await.unwrap();
+                    }
+                    Err(e) => {
+                        info!("error receiving message: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        })
+    }
+}
+
+async fn handle_socket(socket: WebSocket, coordinates: ChunkCoordinates, state: AppState) {
+    state.add_connection();
+
+    let handler = WebSocketHandler::connect(&state, socket, coordinates).await;
+
+    match handler {
+        Ok(handler) => {
+            handler.run().await;
         }
-
-        // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    });
-
-    // If any one of the tasks exit, abort the other.
-
-    tokio::select! {
-        _ = &mut handler_receiver => {
-            debug!("receiver task exited");
-            handler_sender.abort();
-        }
-        _ = &mut handler_sender => {
-            debug!("sender task exited");
-            handler_receiver.abort();
+        Err(mut socket) => {
+            socket.send(Message::Close(None)).await.unwrap();
+            return;
         }
     }
 
     info!("socket closed");
+
     // decrement the connections amount in appstate
-    state
-        .connections
-        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    state.remove_connection();
 }
+
+// ! problematic_code
+// ! sending the message through websocket keeps memory allocated.
+// ! afaik, sender is not doing things properly.
+// ! the Vec::with_capacity(BOARD_SIZE + 1) is not released,
+// {
+// let board = state.board.read().await.clone();
+
+// let mut board_message = Vec::with_capacity(BOARD_SIZE + 1);
+// board_message.push(0x00); // 0x00 indicates full board
+// board_message.extend_from_slice(&board[..BOARD_SIZE / 10].to_vec());
+
+// sender.send(Message::Binary(board_message)).await.unwrap();
+// }
+// todo, send only the chunk requested. Is annoying to keep track of which chunks the client is looking at.
+// todo, non dymanic chunks, ui shows you navigation to go to the next chunk.
+// todo, ^ this still needs the update vec to include for which chunk it was meant.
