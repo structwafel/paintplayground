@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,20 +9,34 @@
         #gridContainer {
             display: grid;
             grid-template-columns: repeat(100, 10px);
-            position: relative;
-            width: 1000px;
-            height: 1000px;
+            position: absolute;
+            max-width: 1000px;
+            max-height: 1000px;
             overflow: hidden;
             border: 1px solid black;
+            width: 100%;
+            height: 100%;
+            will-change: transform;
         }
+
         .gridBox {
             width: 10px;
             height: 10px;
             cursor: pointer;
             background-color: grey;
+            border: none;
+        }
+
+        #parendGridContainer {
+            width: 500px;
+            height: 500px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid black;
         }
     </style>
 </head>
+
 <body>
     <div>
         <h1>WebSocket Color Grid</h1>
@@ -39,9 +54,10 @@
 
         </div>
     </div>
-    <div>
+    <div id="parendGridContainer">
         <div id="gridContainer"></div>
     </div>
     <script type="module" src="stuff.js"></script>
 </body>
+
 </html>

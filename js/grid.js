@@ -1,15 +1,20 @@
 import { selectedColor } from "./color.js";
 
+function left_or_right(button) {
+    return (button === 0 || button === 2);
+}
+
 export class Grid {
     constructor() {
         this.cellSize = 10;
-        this.gridWidth = 100;
-        this.gridHeight = 100;
+        this.gridWidth = 1000; // Adjust as needed
+        this.gridHeight = 1000; // Adjust as needed
         this.scale = 1;
         this.translation = { x: 0, y: 0 };
         this.lastColoredSquare = null;
 
-        this.mouseDown = false;
+        this.placemouseDown = false;
+        this.movemouseDown = false;
         this.lastMousePos = { x: 0, y: 0 };
 
         this.createGrid();
@@ -18,13 +23,15 @@ export class Grid {
 
     createGrid() {
         const gridContainer = document.getElementById('gridContainer');
-        gridContainer.style.border = '1px solid black';
-        document.body.appendChild(gridContainer);
+        gridContainer.style.position = 'absolute';
+        gridContainer.style.overflow = 'hidden';
+        gridContainer.style.width = `${this.gridWidth}px`;
+        gridContainer.style.height = `${this.gridHeight}px`;
 
-        for (let i = 0; i < this.gridWidth; i++) {
-            for (let j = 0; j < this.gridHeight; j++) {
+        for (let i = 0; i < this.gridWidth / this.cellSize; i++) {
+            for (let j = 0; j < this.gridHeight / this.cellSize; j++) {
                 const box = document.createElement('div');
-                const index = i * this.gridWidth + j;
+                const index = i * (this.gridWidth / this.cellSize) + j;
                 box.id = index;
                 box.className = 'gridBox';
                 gridContainer.appendChild(box);
@@ -46,16 +53,16 @@ export class Grid {
     }
 
     handleZoom(event) {
-        const zoomFactor = 1.1;
+        const zoomFactor = 1.02;
         const mouseX = event.clientX - this.gridContainer.getBoundingClientRect().left;
         const mouseY = event.clientY - this.gridContainer.getBoundingClientRect().top;
 
         if (event.deltaY < 0) {
-            this.scale *= zoomFactor;
+            this.scale = Math.min(this.scale * zoomFactor, 4); // Max zoom in
             this.translation.x -= mouseX * (zoomFactor - 1);
             this.translation.y -= mouseY * (zoomFactor - 1);
         } else {
-            this.scale /= zoomFactor;
+            this.scale = Math.max(this.scale / zoomFactor, 0.5); // Max zoom out
             this.translation.x += mouseX * (1 - 1 / zoomFactor);
             this.translation.y += mouseY * (1 - 1 / zoomFactor);
         }
@@ -63,15 +70,33 @@ export class Grid {
         this.applyTransformations();
     }
 
+
+
     handlePanning(event) {
-        if (event.button !== 1) {
-            return;
-        }
+        if (!this.movemouseDown) return;
+
         const dx = event.clientX - this.lastMousePos.x;
         const dy = event.clientY - this.lastMousePos.y;
 
         this.translation.x += dx;
         this.translation.y += dy;
+
+        // Constrain the grid within its parent
+        const parentRect = this.gridContainer.parentElement.getBoundingClientRect();
+        const gridRect = this.gridContainer.getBoundingClientRect();
+
+        if (gridRect.left > parentRect.left) {
+            this.translation.x -= (gridRect.left - parentRect.left);
+        }
+        if (gridRect.top > parentRect.top) {
+            this.translation.y -= (gridRect.top - parentRect.top);
+        }
+        if (gridRect.right < parentRect.right) {
+            this.translation.x += (parentRect.right - gridRect.right);
+        }
+        if (gridRect.bottom < parentRect.bottom) {
+            this.translation.y += (parentRect.bottom - gridRect.bottom);
+        }
 
         this.lastMousePos = { x: event.clientX, y: event.clientY };
 
@@ -85,7 +110,6 @@ export class Grid {
     addEventListeners() {
         this.gridContainer.addEventListener('click', (event) => {
             if (event.target.classList.contains('gridBox')) {
-                console.log(event.target.id);
                 this.handleColoring(event.target.id);
             }
         });
@@ -96,31 +120,32 @@ export class Grid {
         });
 
         this.gridContainer.addEventListener('mousedown', (event) => {
-            console.log('mousedown, button:', event.button);
             if (event.button === 0) {
-                this.mouseDown = true;
+                this.placemouseDown = true;
+            } else if (event.button == 2) {
+                this.movemouseDown = true;
                 this.lastMousePos = { x: event.clientX, y: event.clientY };
             }
         });
 
         this.gridContainer.addEventListener('mouseup', (event) => {
-            if (event.button === 0) {
-                this.mouseDown = false;
+            if (left_or_right(event.button)) {
+                this.placemouseDown = false;
+                this.movemouseDown = false;
             }
         });
 
         document.addEventListener('mouseup', (event) => {
-            if (event.button === 0) {
-                this.mouseDown = false;
+            if (left_or_right(event.button)) {
+                this.placemouseDown = false;
+                this.movemouseDown = false;
             }
         });
 
         this.gridContainer.addEventListener('mousemove', (event) => {
-            console.log('mousemove, button:', event.button, this.mouseDown);
-            if (this.mouseDown && event.button === 0) {
+            if (this.placemouseDown) {
                 this.handleColoring(event.target.id);
-
-            } else if (this.mouseDown && event.button === 1) {
+            } else if (this.movemouseDown) {
                 this.handlePanning(event);
             }
         });
