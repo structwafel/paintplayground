@@ -67,10 +67,9 @@ export class Grid {
             this.translation.y += mouseY * (1 - 1 / zoomFactor);
         }
 
+        this.constrainTranslation();
         this.applyTransformations();
     }
-
-
 
     handlePanning(event) {
         if (!this.movemouseDown) return;
@@ -81,29 +80,25 @@ export class Grid {
         this.translation.x += dx;
         this.translation.y += dy;
 
-        // Constrain the grid within its parent
-        const parentRect = this.gridContainer.parentElement.getBoundingClientRect();
-        const gridRect = this.gridContainer.getBoundingClientRect();
-
-        if (gridRect.left > parentRect.left) {
-            this.translation.x -= (gridRect.left - parentRect.left);
-        }
-        if (gridRect.top > parentRect.top) {
-            this.translation.y -= (gridRect.top - parentRect.top);
-        }
-        if (gridRect.right < parentRect.right) {
-            this.translation.x += (parentRect.right - gridRect.right);
-        }
-        if (gridRect.bottom < parentRect.bottom) {
-            this.translation.y += (parentRect.bottom - gridRect.bottom);
-        }
-
+        this.constrainTranslation();
         this.lastMousePos = { x: event.clientX, y: event.clientY };
 
         this.applyTransformations();
     }
 
+    constrainTranslation() {
+        const parentRect = this.gridContainer.parentElement.getBoundingClientRect();
+        const gridRect = this.gridContainer.getBoundingClientRect();
+
+        const minX = parentRect.width - gridRect.width * this.scale;
+        const minY = parentRect.height - gridRect.height * this.scale;
+
+        this.translation.x = Math.min(0, Math.max(this.translation.x, minX));
+        this.translation.y = Math.min(0, Math.max(this.translation.y, minY));
+    }
+
     applyTransformations() {
+        this.gridContainer.style.transformOrigin = '0 0'; // Ensure scaling from top-left corner
         this.gridContainer.style.transform = `scale(${this.scale}) translate(${this.translation.x}px, ${this.translation.y}px)`;
     }
 
