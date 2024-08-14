@@ -13,6 +13,7 @@ pub enum Error {
     TooManyChunksLoaded,
 }
 
+#[derive(Debug)]
 pub enum ChunkRequest {
     Storage,
     Live,
@@ -53,6 +54,7 @@ impl BoardManagerCommunicator {
     }
 
     pub async fn get_handler(&self, coordinates: ChunkCoordinates) -> Result<HandlerData, Error> {
+        debug!("BMC- get_handler");
         let (sender, receiver) = oneshot::channel();
         self.board_manager_tx
             .send(BoardManagerMessage::GetHandler(coordinates, sender))
@@ -83,10 +85,6 @@ where
 
     /// The board manager receives messages from BoardManagerCommunicator
     board_manager_rx: tokio::sync::mpsc::Receiver<BoardManagerMessage>,
-
-    #[cfg(test)]
-    // check which chunkManager was created
-    id: AtomicI64,
 }
 
 impl<T> BoardManager<T>
@@ -104,9 +102,6 @@ where
             chunk_m_updates_rx: chunk_updates_rx,
             board_manager_rx,
             chunk_m_updates_tx: chunk_updates_tx,
-
-            #[cfg(test)]
-            id: 0.into(),
         };
 
         // start the board manager
@@ -129,10 +124,12 @@ where
                 message=self.board_manager_rx.recv()=>{
                     match message {
                         Some(BoardManagerMessage::GetChunk(coordinates, request_type, sender)) => {
+                            debug!("BM - GetChunk request {:?}:{:?}", coordinates, request_type);
                             let chunk = self.read_chunk(coordinates, request_type).await;
                             let _ = sender.send(chunk);
                         }
                         Some(BoardManagerMessage::GetHandler(coordinates, sender)) => {
+                            debug!("BM - GetHandler request {:?}", coordinates);
                             let handler = self.get_chunk_handler(coordinates);
                             let _ = sender.send(handler);
                         }
@@ -159,34 +156,8 @@ where
                 }
 
             }
-            match self.chunk_m_updates_rx.recv().await {
-                Some(f) => match f {
-                    ChunkUpdate::Clear(coords) => {
-                        // remove this ChunkManager from the Map of active chunks.
-                        // ! it needs to save itself before sending this message
-                        let _ = self.chunks.remove(&coords);
-                    }
-                    ChunkUpdate::Save => {
-                        // ? Is probably better if Chunks just save themselves instead of the BoardManager
-                    }
-                },
-                None => panic!("Board manager is holding a sender, yet all senders are dropped?"),
-            }
-
-            match self.board_manager_rx.recv().await {
-                Some(message) => match message {
-                    BoardManagerMessage::GetChunk(coordinates, request_type, sender) => {
-                        let chunk = self.read_chunk(coordinates, request_type).await;
-                        let _ = sender.send(chunk); // if receiver is dropped, the application is probably dead
-                    }
-                    BoardManagerMessage::GetHandler(coordinates, sender) => {
-                        let handler = self.get_chunk_handler(coordinates);
-                        let _ = sender.send(handler); // if receiver is dropped, the application is probably dead
-                    }
-                },
-                None => break,
-            }
         }
+        debug!("BM - Stopping");
     }
 
     pub async fn read_chunk(
@@ -195,7 +166,14 @@ where
         request_type: ChunkRequest,
     ) -> Option<Chunk> {
         match request_type {
-            ChunkRequest::Storage => self.chunks_loader_saver.load_chunk(coordinates),
+            ChunkRequest::Storage => self
+                .chunks_loader_saver
+                .load_chunk(coordinates)
+                .map_err(|err| {
+                    error!("loading error setting default: {:?}", err);
+                })
+                .ok(),
+
             ChunkRequest::Live => {
                 let handler = self
                     .chunks
@@ -213,6 +191,8 @@ where
             .entry(coordinates)
             .or_try_insert_with(|| {
                 if self.chunks_loaded() < 100 {
+                    debug!("Creating new ChunkManager");
+
                     self.chunks_loaded
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -222,6 +202,7 @@ where
                         self.chunk_m_updates_tx.clone(),
                     ))
                 } else {
+                    debug!("Too many chunks loaded");
                     // return Error::TooManyChunksLoaded;
                     Err(Error::TooManyChunksLoaded)
                 }

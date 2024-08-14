@@ -30,7 +30,7 @@ pub async fn ws_handler(
 struct WebSocketHandler {
     coordinates: ChunkCoordinates,
     broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
-    update_tx: mpsc::Sender<PackedCell>,
+    update_tx: mpsc::Sender<Vec<PackedCell>>,
 
     // split websocket
     sender: SplitSink<WebSocket, Message>,
@@ -45,11 +45,12 @@ impl WebSocketHandler {
         coordinates: ChunkCoordinates,
     ) -> Result<Self, WebSocket> {
         // try to get the chunk
+        debug!("WH - getting handler data");
         let handler_data = match state.board_communicator.get_handler(coordinates).await {
             Err(err) => match err {
                 // if there are too many chunks loaded, tell the client
                 board_manager::Error::TooManyChunksLoaded => {
-                    let message = WsMessages::too_many_chunks_buffer();
+                    let message = WsMessage::too_many_chunks_buffer();
                     socket.send(Message::Binary(message)).await.unwrap();
                     return Err(socket);
                 }
@@ -66,7 +67,8 @@ impl WebSocketHandler {
         let chunk = handler_data.fetch_chunk().await;
 
         // send the chunk to the client
-        let message = WsMessages::entire_chunk_buffer(chunk);
+        debug!("sending chunk to client");
+        let message = WsMessage::entire_chunk_buffer(chunk);
         socket.send(Message::Binary(message)).await.unwrap();
 
         let (sender, receiver) = socket.split();
@@ -99,11 +101,10 @@ impl WebSocketHandler {
 
     fn start_receiver(
         mut receiver: SplitStream<WebSocket>,
-        update_tx: mpsc::Sender<PackedCell>,
+        update_tx: mpsc::Sender<Vec<PackedCell>>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(msg) = receiver.next().await {
-                info!("received message: {:?}", msg);
                 let msg = match msg {
                     Ok(msg) => msg,
                     Err(e) => {
@@ -114,19 +115,21 @@ impl WebSocketHandler {
 
                 match msg {
                     axum::extract::ws::Message::Binary(data) => {
-                        if data.len() == 8 {
-                            let packed_value = u64::from_le_bytes(data.try_into().unwrap());
-                            let index = (packed_value >> 4) as usize;
-                            let color_number = (packed_value & 0xF) as u8;
+                        // todo, add first byte for message type.
 
-                            let packed_cell = PackedCell::new(index, color_number);
+                        // messages will be an array of index and value (PackedCell)
+                        let updates: Vec<PackedCell> = data
+                            .chunks_exact(8)
+                            .map(|chunk| {
+                                let packed_value = u64::from_le_bytes(chunk.try_into().unwrap());
+                                let index = (packed_value >> 4) as usize;
+                                let color_number = (packed_value & 0xF) as u8;
 
-                            // Send message to the AppState
-                            update_tx.send(packed_cell).await.unwrap();
-                        } else {
-                            info!("invalid binary message length: {:?}", data.len());
-                            // todo, pehaps a "resync" with the boardRequester
-                        }
+                                PackedCell::new(index, color_number)
+                            })
+                            .collect();
+                        debug!("received {} updates", updates.len());
+                        update_tx.send(updates).await.unwrap();
                     }
                     // we can ignore ping, handled by axum
                     axum::extract::ws::Message::Ping(_) => {}
@@ -152,7 +155,8 @@ impl WebSocketHandler {
             loop {
                 match broadcast_rx.recv().await {
                     Ok(packed_cells) => {
-                        let message = WsMessages::chunk_update_buffer(packed_cells);
+                        debug!("received broadcast");
+                        let message = WsMessage::chunk_update_buffer(packed_cells);
 
                         sender.send(Message::Binary(message)).await.unwrap();
                     }
@@ -169,13 +173,16 @@ impl WebSocketHandler {
 async fn handle_socket(socket: WebSocket, coordinates: ChunkCoordinates, state: AppState) {
     state.add_connection();
 
+    debug!("new websocket connection");
     let handler = WebSocketHandler::connect(&state, socket, coordinates).await;
 
     match handler {
         Ok(handler) => {
+            debug!("websocket connected");
             handler.run().await;
         }
         Err(mut socket) => {
+            info!("too many chunks loaded, closing connection");
             socket.send(Message::Close(None)).await.unwrap();
             return;
         }

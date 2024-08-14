@@ -1,39 +1,32 @@
 import { Grid } from '../js/grid.js';
-import { selectedColor } from './color.js';
+import { colorMapping } from './color.js';
 import { Ws } from './ws.js';
 
 export class ChunkManager {
     constructor(x, y) {
-        this.grid = new Grid(x, y);
+        this.grid = new Grid(this.appendColoringUpdate.bind(this));
 
-        this.ws = new Ws(x, y);
+        this.ws = new Ws(x, y, this.applyColoringUpdate.bind(this));
 
-        this.grid.gridContainer.addEventListener('click', (event) => {
-            if (event.target.classList.contains('gridBox')) {
-                this.appendColoringUpdate(event.target.id, selectedColor);
-            }
-        });
 
         this.updates = [];
 
         // periodically send updates to server
         setInterval(() => {
-            console.log(this.updates.length);
-            if (this.updates.length > 0) {
-                const data = new Uint8Array(this.updates);
+            const filteredUpdates = this.updates
+                .map((color, index) => ({ index, color }))
+                .filter(update => update.color !== undefined);
+
+            if (filteredUpdates.length > 0) {
+                console.log("sending", filteredUpdates.length, "updates");
+                const data = new Uint8Array(filteredUpdates.length * 8); // Each u64 is 8 bytes
                 const view = new DataView(data.buffer);
 
-                this.updates.forEach((update, i) => {
-                    console.log(update, i);
-                    // const index = view.getUint32(i, true);
-                    // const color = view.getUint8(i + 4);
-
-                    // this.ws.socket.send(data);
+                filteredUpdates.forEach((update, i) => {
+                    view.setBigUint64(i * 8, BigInt(update.index << 4) | BigInt(colorMapping[update.color]), true);
                 });
 
-                // send updates as binary
-                // let binary = new Uint8Array(this.updates.length * 3);
-                // this.socket.send(this.updates);
+                this.ws.socket.send(data.buffer);
                 this.updates = [];
             }
         }, 1000);
@@ -44,6 +37,9 @@ export class ChunkManager {
         this.updates[index] = color;
     }
 
+    applyColoringUpdate(index, color) {
+        this.grid.colorBox(index, color);
+    }
 
 
 }

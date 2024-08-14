@@ -2,3 +2,4 @@
 *.bin
 *.lz4
 *.zst
+*.chunk

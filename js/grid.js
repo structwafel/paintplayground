@@ -7,7 +7,7 @@ function left_or_right(button) {
 const defaultGridScale = 0.5;
 const borderThickness = 30;
 export class Grid {
-    constructor() {
+    constructor(coloringCallback) {
         this.cellSize = 10;
         this.gridWidth = 1000;
         this.gridHeight = 1000;
@@ -18,6 +18,9 @@ export class Grid {
         this.placemouseDown = false;
         this.movemouseDown = false;
         this.lastMousePos = { x: 0, y: 0 };
+
+
+        this.coloringCallback = coloringCallback;
 
         this.createGrid();
         this.addEventListeners();
@@ -45,11 +48,13 @@ export class Grid {
 
     colorBox(index, color) {
         const box = this.gridContainer.querySelector(`[id='${index}']`);
+        if (!box) return
         box.style.backgroundColor = color;
     }
 
     handleColoring(index) {
         if (index !== this.lastColoredSquare) {
+            this.coloringCallback(index, selectedColor);
             this.colorBox(index, selectedColor);
         }
     }

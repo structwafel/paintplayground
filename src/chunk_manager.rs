@@ -27,7 +27,7 @@ where
     /// broadcast updates to all websockets connections
     broadcaster_tx: broadcast::Sender<Vec<PackedCell>>,
     /// receive updates from the websockets
-    update_rx: mpsc::Receiver<PackedCell>,
+    update_rx: mpsc::Receiver<Vec<PackedCell>>,
 
     /// Websockets can make requests to the manager
     chunk_requester_rx: mpsc::Receiver<oneshot::Sender<Chunk>>,
@@ -66,9 +66,16 @@ where
             ping_chunk_requester_tx,
         };
 
+        let chunk = chunk_saver
+            .load_chunk(coordinates)
+            .map_err(|err| {
+                error!("loading error setting default: {:?}", err);
+            })
+            .unwrap_or_default();
+
         let chunk_manager = Self {
             chunk_saver,
-            chunk: Chunk::new(coordinates),
+            chunk,
             coordinates,
             broadcaster_tx,
             update_rx,
@@ -78,6 +85,7 @@ where
             last_change: std::time::Instant::now(),
         };
 
+        debug!("Starting chunk manager for {:?}", coordinates);
         tokio::spawn(async move { chunk_manager.run().await });
 
         handler_data
@@ -97,8 +105,6 @@ where
 
     pub async fn run(mut self) {
         // recieve updates, and buffer them
-        println!("Starting canvas manager");
-
         let mut changed;
         loop {
             let mut smaller_buffer = Vec::new();
@@ -109,17 +115,21 @@ where
             loop {
                 tokio::select! {
                     // handle updates from the websockets
-                    Some(change) = self.update_rx.recv() => {
-                        smaller_buffer.push(change);
-                        // buffer[change.index()] = change.value();
+                    Some(changes) = self.update_rx.recv() => {
+                        self.last_change = std::time::Instant::now();
+                        debug!("CH - {:?} got an update", self.coordinates);
+                        // todo, for contested chunks, use chunk as buffer
+                        smaller_buffer.extend(changes);
                         changed = true;
                     }
                     // handle requests from the websockets
                     Some(request) = self.chunk_requester_rx.recv() => {
+                        debug!("CH - {:?} got a chunk request, responding...", self.coordinates);
                         request.send(self.chunk.clone()).unwrap();
                     }
                     // handle pings
                     Some(ping) = self.ping_chunk_requester_rx.recv() => {
+                        debug!("ChunkManager {:?} got a ping request, responding...", self.coordinates);
                         ping.send(()).unwrap();
                     }
                     _ = &mut timeout => {
@@ -139,7 +149,6 @@ where
                 }
                 continue;
             }
-            println!("Size of smaller buffer {}", smaller_buffer.len());
 
             // buffer and board are chunks, only the non-zero buffer values need to be set in the board
             // only take the last of each unique indes
@@ -159,6 +168,7 @@ where
 
             // apply the changes to the board
             {
+                // debug!("CH - {:?} applying changes", self.coordinates);
                 for changes in &last_changes {
                     let packed_index = changes.index();
 
@@ -167,6 +177,7 @@ where
 
                     if is_left {
                         self.chunk[byte_index].set_left(changes.value().into());
+                        // println!("Setting left {:?} to {:?}", byte_index, changes.value());
                     } else {
                         self.chunk[byte_index].set_right(changes.value().into());
                     }
@@ -175,11 +186,17 @@ where
 
             // broadcast the changes made to all the clients
             self.broadcast(last_changes);
+
+            // save the chunk, if it has been changed
+            self.chunk_saver
+                .save_chunk(self.chunk.clone(), self.coordinates);
         }
 
         // loop is stopped, lets destroy ourselves
         match self.delete_yourself().await {
-            Ok(_) => (),
+            Ok(_) => {
+                debug!("ChunkManager {:?} is deleted", self.coordinates);
+            }
             Err(error) => {
                 // what do we do now?
                 error!("I want to delete myself, but i errored doing so");
@@ -190,10 +207,19 @@ where
     }
 
     fn broadcast(&mut self, messages: Vec<PackedCell>) {
+        debug!(
+            "ChunkManager {:?} is broadcasting {}",
+            self.coordinates,
+            messages.len()
+        );
         self.broadcaster_tx.send(messages).unwrap();
     }
 
     async fn delete_yourself(&self) -> Result<(), Box<dyn Error>> {
+        debug!(
+            "ChunkManager {:?} is trying deleting itself",
+            self.coordinates
+        );
         // check if there are no websockets connected to you
         if self.update_rx.sender_weak_count() > 0 {
             return Err("There are senders".into());
@@ -215,7 +241,7 @@ where
     }
 
     fn connections_quantity(&self) -> usize {
-        self.chunk_requester_rx.sender_strong_count()
+        self.update_rx.sender_strong_count()
     }
     fn has_connections(&self) -> bool {
         self.connections_quantity() > 0
@@ -228,7 +254,7 @@ where
 #[derive(Debug)]
 pub struct HandlerData {
     pub broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
-    pub update_tx: mpsc::Sender<PackedCell>,
+    pub update_tx: mpsc::Sender<Vec<PackedCell>>,
 
     pub chunk_requester_tx: mpsc::Sender<oneshot::Sender<Chunk>>,
     pub ping_chunk_requester_tx: mpsc::Sender<oneshot::Sender<()>>,
