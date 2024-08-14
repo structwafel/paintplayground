@@ -21,7 +21,9 @@ pub async fn ws_handler(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     // todo, check if the user is allowed to connect to this chunk
-    let coordinates = ChunkCoordinates::new(x, y);
+    let Ok(coordinates) = ChunkCoordinates::new(x, y) else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
+    };
 
     // upgrade the request to a websocket
     ws.on_upgrade(move |socket| handle_socket(socket, coordinates, state))

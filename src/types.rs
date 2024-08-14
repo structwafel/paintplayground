@@ -1,8 +1,11 @@
+use std::env;
 pub use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
 pub use std::sync::Arc;
+use std::sync::LazyLock;
 
+use axum::response::IntoResponse;
 pub use tokio::sync::broadcast;
 pub use tokio::sync::mpsc;
 pub use tokio::sync::oneshot;
@@ -16,7 +19,18 @@ pub use tracing::{debug, error, info, warn};
 pub const CHUNK_LENGTH: usize = 100;
 pub const CHUNK_SIZE: usize = CHUNK_LENGTH * CHUNK_LENGTH;
 pub const CHUNK_BYTE_SIZE: usize = CHUNK_SIZE / 2;
-// pub const CHUNKS_IN_DIRECTION: usize = 1_000;
+
+// get this from env
+pub static CHUNKS_IN_DIRECTION: LazyLock<usize> = LazyLock::new(|| {
+    env::var("CHUNKS_IN_DIRECTION")
+        .unwrap_or({
+            info!("CHUNKS_IN_DIRECTION not set, using 10");
+            "10".to_string()
+        })
+        // .expect("CHUNKS_IN_DIRECTION environment variable not set")
+        .parse()
+        .expect("CHUNKS_IN_DIRECTION is not a unsigned number")
+});
 // pub const CHUNKS: usize = CHUNKS_IN_DIRECTION * CHUNKS_IN_DIRECTION;
 
 pub const MB: u64 = 1024 * 1024;
@@ -134,6 +148,7 @@ type ChunkArray<const N: usize> = [ChunkColor; N];
 // type ChunkArray = [ChunkColor; CHUNK_SIZE / 2];
 
 pub type Chunk = InnerChunk<{ CHUNK_SIZE / 2 }>;
+#[cfg(test)]
 type SmallChunkArray = InnerChunk<5>;
 
 #[derive(Debug, Clone)]
@@ -229,13 +244,20 @@ impl Default for ChunkCoordinates {
 }
 
 impl ChunkCoordinates {
-    pub fn new(x: i64, y: i64) -> Self {
-        // check if the values are valid
-        // if x > CHUNKS_IN_DIRECTION - 1 || y > CHUNKS_IN_DIRECTION - 1 {
-        // return None;
-        // }
+    pub fn new(x: i64, y: i64) -> Result<Self, ()> {
+        // check if the values are valid, chunks_in_direction is usize.
 
-        Self { x, y }
+        let chunks_in_direction = *CHUNKS_IN_DIRECTION as i64;
+
+        if x.abs() > chunks_in_direction || y.abs() > chunks_in_direction {
+            debug!(
+                "Invalid coordinates, x: {}, y: {}, chunks_in_direction: {}",
+                x, y, chunks_in_direction
+            );
+            return Err(());
+        }
+
+        Ok(Self { x, y })
     }
     pub fn x(&self) -> i64 {
         self.x
@@ -360,7 +382,7 @@ mod testing {
     #[test]
     fn chunk_loading_saving() {
         let mut chunk = Chunk::default();
-        let coordinates = ChunkCoordinates::new(0, 0);
+        let coordinates = ChunkCoordinates::new(0, 0).unwrap();
 
         // edit some values in the chunk
         chunk[0].set_left(Color::Brown);

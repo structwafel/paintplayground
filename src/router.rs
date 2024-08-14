@@ -43,8 +43,9 @@ async fn get_chunk(
     State(state): State<AppState>,
 ) -> Result<Vec<u8>, impl IntoResponse> {
     // check based on the user if they are allowed to get these coordinates
-    let coordinates = ChunkCoordinates::new(x, y);
-
+    let Ok(coordinates) = ChunkCoordinates::new(x, y) else {
+        return Err(axum::http::StatusCode::NOT_FOUND);
+    };
     // todo perhaps have  a _raw version that gets the Vec<u8> directly
 
     let Some(chunk) = state

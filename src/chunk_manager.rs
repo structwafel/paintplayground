@@ -129,7 +129,7 @@ where
                     }
                     // handle pings
                     Some(ping) = self.ping_chunk_requester_rx.recv() => {
-                        debug!("ChunkManager {:?} got a ping request, responding...", self.coordinates);
+                        debug!("CM - {:?} got a ping request, responding...", self.coordinates);
                         ping.send(()).unwrap();
                     }
                     _ = &mut timeout => {
@@ -195,7 +195,7 @@ where
         // loop is stopped, lets destroy ourselves
         match self.delete_yourself().await {
             Ok(_) => {
-                debug!("ChunkManager {:?} is deleted", self.coordinates);
+                debug!("CM - {:?} is deleted", self.coordinates);
             }
             Err(error) => {
                 // what do we do now?
@@ -208,7 +208,7 @@ where
 
     fn broadcast(&mut self, messages: Vec<PackedCell>) {
         debug!(
-            "ChunkManager {:?} is broadcasting {}",
+            "CM - {:?} is broadcasting {}",
             self.coordinates,
             messages.len()
         );
@@ -216,10 +216,7 @@ where
     }
 
     async fn delete_yourself(&self) -> Result<(), Box<dyn Error>> {
-        debug!(
-            "ChunkManager {:?} is trying deleting itself",
-            self.coordinates
-        );
+        debug!("CM - {:?} is trying deleting itself", self.coordinates);
         // check if there are no websockets connected to you
         if self.update_rx.sender_weak_count() > 0 {
             return Err("There are senders".into());
