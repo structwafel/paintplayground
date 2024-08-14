@@ -2,6 +2,9 @@ import { colorFromNumber } from './color.js';
 
 export class Ws {
     constructor(x, y, applyColoringUpdate) {
+        this.x = x;
+        this.y = y;
+
         this.applyColor = applyColoringUpdate;
         const socket = this.connect_ws(x, y);
         socket.onmessage = (event) => {
@@ -19,6 +22,26 @@ export class Ws {
         };
 
         return socket;
+    }
+
+    connect_and_extrac_ws(x, y) {
+        const socket = this.connect_ws(x, y);
+        socket.onmessage = (event) => {
+            this.handleMessage(event.data);
+        }
+
+
+        return socket;
+    }
+
+    // todo do this server side, so it checks if you are allowed to move to that square
+    move(x, y) {
+        this.socket.close();
+
+        this.x += x;
+        this.y += y;
+
+        this.socket = this.connect_and_extrac_ws(this.x, this.y);
     }
 
     handleMessage(data) {

@@ -11,13 +11,14 @@
             grid-template-columns: repeat(100, 10px);
             position: absolute;
             overflow: hidden;
-            /* border: 1px solid black; */
+            border: 5px solid rgba(0, 8, 255, 0.131);
             max-width: 1000px;
             max-height: 1000px;
-            /* will-change: transform; */
+            will-change: transform;
             transform-origin: 0px 0px;
             transform: translate(30px, 30px) scale(0.5);
-            gap: 0; /* Ensure no gaps between grid items */
+            gap: 0;
+            /* Ensure no gaps between grid items */
 
         }
 
@@ -30,12 +31,40 @@
         }
 
         #parendGridContainer {
-            width: 560px;
-            height: 560px;
+            width: 570px;
+            height: 570px;
             position: relative;
             overflow: hidden;
             border: 1px solid black;
+            background-color: rgba(255, 196, 0, 0.564);
 
+        }
+        .navigationButton {
+            position: absolute;
+            z-index: 1;
+            background-color: white;
+            border: 1px solid black;
+            cursor: pointer;
+        }
+        #upButton {
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #rightButton {
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+        }
+        #downButton {
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #leftButton {
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
         }
     </style>
 </head>
@@ -43,6 +72,7 @@
 <body>
     <div>
         <h1>WebSocket Color Grid</h1>
+        <div id="location">Current location: (0,0)</div>
         <div id="color-picker">
             <button id="grey">Grey- do not use</button>
             <button id="red">Red</button>
@@ -58,7 +88,11 @@
         </div>
     </div>
     <div id="parendGridContainer">
-            <div id="gridContainer"></div>
+        <button class="navigationButton" id="upButton">↑</button>
+        <button class="navigationButton" id="rightButton">→</button>
+        <button class="navigationButton" id="downButton">↓</button>
+        <button class="navigationButton" id="leftButton">←</button>
+        <div id="gridContainer"></div>
     </div>
     <script type="module" src="stuff.js"></script>
 </body>

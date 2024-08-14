@@ -11,8 +11,8 @@ use futures::{
 };
 use tracing::{debug, info};
 
-use crate::AppState;
 use crate::{board_manager, types::*};
+use crate::{chunk_manager, AppState};
 
 #[axum::debug_handler]
 pub async fn ws_handler(
@@ -31,8 +31,9 @@ pub async fn ws_handler(
 
 struct WebSocketHandler {
     coordinates: ChunkCoordinates,
-    broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
-    update_tx: mpsc::Sender<Vec<PackedCell>>,
+    handler_data: chunk_manager::HandlerData,
+    // broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
+    // update_tx: mpsc::Sender<Vec<PackedCell>>,
 
     // split websocket
     sender: SplitSink<WebSocket, Message>,
@@ -77,16 +78,17 @@ impl WebSocketHandler {
 
         Ok(Self {
             coordinates,
-            broadcast_rx: handler_data.broadcast_rx,
-            update_tx: handler_data.update_tx,
+            handler_data,
+            // broadcast_rx: handler_data.broadcast_rx,
+            // update_tx: handler_data.update_tx,
             sender,
             receiver,
         })
     }
 
     async fn run(self) {
-        let mut receiver_handler = Self::start_receiver(self.receiver, self.update_tx);
-        let mut sender_handler = Self::start_sender(self.sender, self.broadcast_rx);
+        let mut receiver_handler = Self::start_receiver(self.receiver, self.handler_data.update_tx);
+        let mut sender_handler = Self::start_sender(self.sender, self.handler_data.broadcast_rx);
 
         tokio::select! {
             _ = &mut receiver_handler => {

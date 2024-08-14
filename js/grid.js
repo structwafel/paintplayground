@@ -46,6 +46,12 @@ export class Grid {
         this.gridContainer = gridContainer;
     }
 
+    clear() {
+        const boxes = this.gridContainer.querySelectorAll('.gridBox');
+        boxes.forEach(box => box.style.backgroundColor = 'grey');
+    }
+
+
     colorBox(index, color) {
         const box = this.gridContainer.querySelector(`[id='${index}']`);
         if (!box) return

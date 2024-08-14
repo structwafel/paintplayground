@@ -8,7 +8,7 @@ export class ChunkManager {
 
         this.ws = new Ws(x, y, this.applyColoringUpdate.bind(this));
 
-
+        this.allowUpdates = true;
         this.updates = [];
 
         // periodically send updates to server
@@ -30,16 +30,63 @@ export class ChunkManager {
                 this.updates = [];
             }
         }, 1000);
+
+        this.addEventsToNavigationButtons();
     }
 
 
     appendColoringUpdate(index, color) {
-        this.updates[index] = color;
+        if (this.allowUpdates) {
+            this.updates[index] = color;
+        }
     }
 
     applyColoringUpdate(index, color) {
-        this.grid.colorBox(index, color);
+        if (this.allowUpdates) {
+            this.grid.colorBox(index, color);
+        }
     }
 
+    addEventsToNavigationButtons() {
+        const up = document.getElementById("upButton");
+        const right = document.getElementById("rightButton");
+        const down = document.getElementById("downButton");
+        const left = document.getElementById("leftButton");
+        if (up) {
+            up.addEventListener("click", () => {
+                this.buttonEvent(0, 1);
+            });
+        }
+        if (down) {
+            down.addEventListener("click", () => {
+                this.buttonEvent(0, -1);
+            });
+        }
+        if (left) {
+            left.addEventListener("click", () => {
+                this.buttonEvent(-1, 0);
+            });
+        }
+        if (right) {
+            right.addEventListener("click", () => {
+                this.buttonEvent(1, 0);
+            });
+        }
+    }
 
+    buttonEvent(x, y) {
+        console.log("moving ", x, y);
+        this.allowUpdates = false;
+        this.updates = [];
+        this.grid.clear();
+
+        this.ws.move(x, y);
+        this.changeLocationText(this.ws.x, this.ws.y);
+        this.allowUpdates = true;
+    }
+
+    changeLocationText(x, y) {
+        const locationText = document.getElementById("location");
+        locationText.innerText = `Current location: (${x}, ${y})`;
+    }
 }
