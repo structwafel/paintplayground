@@ -28,32 +28,38 @@ use types::*;
 
 const CLEAR_BUFFER_INTERVAL: u64 = 1;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct AppState {
     pub board_communicator: board_manager::BoardManagerCommunicator,
-    connections: AtomicUsize,
-}
-
-impl Clone for AppState {
-    fn clone(&self) -> Self {
-        Self {
-            board_communicator: self.board_communicator.clone(),
-            connections: AtomicUsize::new(
-                self.connections.load(std::sync::atomic::Ordering::SeqCst),
-            ),
-        }
-    }
+    connections: Arc<AtomicUsize>,
 }
 
 impl AppState {
+    pub fn new(board_communicator: board_manager::BoardManagerCommunicator) -> Self {
+        Self {
+            board_communicator,
+            connections: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
     pub fn add_connection(&self) {
+        debug!("Adding connection");
         self.connections
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        debug!(
+            "Connections {}",
+            self.connections.load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     pub fn remove_connection(&self) {
+        debug!("Removing connection");
         self.connections
             .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        debug!(
+            "Connections {}",
+            self.connections.load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 }
 
@@ -77,16 +83,7 @@ async fn main() {
     let board_manager_communicator = board_manager::BoardManager::start(chunk_saver);
 
     // state of the application
-    let state = AppState {
-        connections: AtomicUsize::new(0),
-        board_communicator: board_manager_communicator,
-    };
-
-    // spawn a task to flush the buffer every second
-    // to send the updates to the clients
-    // tokio::spawn(async move {
-    // board_manager.run(manager_receiver).await;
-    // });
+    let state = AppState::new(board_manager_communicator);
 
     let app = router::all_routes(state);
 
