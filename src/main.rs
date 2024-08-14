@@ -91,7 +91,9 @@ async fn main() {
     let app = router::all_routes(state);
 
     // run it with hyper
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3001")
+        .await
+        .unwrap();
     debug!("listening on {}", listener.local_addr().unwrap());
 
     axum::serve(

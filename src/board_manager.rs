@@ -1,4 +1,7 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{
+    atomic::{AtomicI64, AtomicU64},
+    Arc,
+};
 
 use crate::{
     chunk_db::ChunkLoaderSaver,

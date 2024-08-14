@@ -4,12 +4,14 @@ function left_or_right(button) {
     return (button === 0 || button === 2);
 }
 
+const defaultGridScale = 0.5;
+const borderThickness = 30;
 export class Grid {
     constructor() {
         this.cellSize = 10;
-        this.gridWidth = 1000; // Adjust as needed
-        this.gridHeight = 1000; // Adjust as needed
-        this.scale = 1;
+        this.gridWidth = 1000;
+        this.gridHeight = 1000;
+        this.scale = defaultGridScale;
         this.translation = { x: 0, y: 0 };
         this.lastColoredSquare = null;
 
@@ -56,16 +58,19 @@ export class Grid {
         const zoomFactor = 1.02;
         const mouseX = event.clientX - this.gridContainer.getBoundingClientRect().left;
         const mouseY = event.clientY - this.gridContainer.getBoundingClientRect().top;
+        const prevScale = this.scale;
 
         if (event.deltaY < 0) {
             this.scale = Math.min(this.scale * zoomFactor, 4); // Max zoom in
-            this.translation.x -= mouseX * (zoomFactor - 1);
-            this.translation.y -= mouseY * (zoomFactor - 1);
         } else {
-            this.scale = Math.max(this.scale / zoomFactor, 0.5); // Max zoom out
-            this.translation.x += mouseX * (1 - 1 / zoomFactor);
-            this.translation.y += mouseY * (1 - 1 / zoomFactor);
+            this.scale = Math.max(this.scale / zoomFactor, defaultGridScale); // Max zoom out
         }
+
+        const scaleChange = this.scale / prevScale;
+
+        // Adjust translation to keep the zoom centered around the mouse position
+        this.translation.x = mouseX - scaleChange * (mouseX - this.translation.x);
+        this.translation.y = mouseY - scaleChange * (mouseY - this.translation.y);
 
         this.constrainTranslation();
         this.applyTransformations();
@@ -90,16 +95,26 @@ export class Grid {
         const parentRect = this.gridContainer.parentElement.getBoundingClientRect();
         const gridRect = this.gridContainer.getBoundingClientRect();
 
-        const minX = parentRect.width - gridRect.width * this.scale;
-        const minY = parentRect.height - gridRect.height * this.scale;
+        const scaledWidth = this.gridWidth * this.scale;
+        const scaledHeight = this.gridHeight * this.scale;
 
-        this.translation.x = Math.min(0, Math.max(this.translation.x, minX));
-        this.translation.y = Math.min(0, Math.max(this.translation.y, minY));
+        const minX = parentRect.width - scaledWidth - borderThickness;
+        const minY = parentRect.height - scaledHeight - borderThickness;
+
+        if (this.scale <= defaultGridScale) {
+            this.translation.x = Math.min(borderThickness, Math.max(this.translation.x, minX));
+            this.translation.y = Math.min(borderThickness, Math.max(this.translation.y, minY));
+        } else {
+            const maxX = borderThickness;
+            const maxY = borderThickness;
+            this.translation.x = Math.min(maxX, Math.max(this.translation.x, minX));
+            this.translation.y = Math.min(maxY, Math.max(this.translation.y, minY));
+        }
     }
 
     applyTransformations() {
         this.gridContainer.style.transformOrigin = '0 0'; // Ensure scaling from top-left corner
-        this.gridContainer.style.transform = `scale(${this.scale}) translate(${this.translation.x}px, ${this.translation.y}px)`;
+        this.gridContainer.style.transform = `translate(${this.translation.x}px, ${this.translation.y}px) scale(${this.scale})`;
     }
 
     addEventListeners() {
