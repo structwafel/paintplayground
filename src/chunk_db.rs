@@ -30,12 +30,15 @@ impl SimpleToFileSaver {
     }
 }
 
+// todo use compression for smaller saved files
 /// Saves in canvas dir
 impl ChunkLoaderSaver for SimpleToFileSaver {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
         // save the chunk to the file system
         debug!("Saving chunk at {:?}", coordinates);
         let mut file = File::create(self.file_path(coordinates)).unwrap();
+        // use best compression before saving
+        // let compressed = chunk.to_compressed();
         file.write_all(&chunk.to_u8vec()).unwrap();
     }
 

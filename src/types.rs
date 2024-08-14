@@ -216,6 +216,14 @@ impl<const N: usize> InnerChunk<N> {
         //     unsafe { std::slice::from_raw_parts(self.0.as_ptr() as *const u8, self.0.len()) };
         // slice.to_vec()
     }
+
+    // ? add compression
+    // pub(crate) fn to_compressed(&self) -> Vec<u8> {
+    // let mut encoder = lz4::EncoderBuilder::new().build(Vec::new()).unwrap();
+    // encoder.write_all(&self.to_u8vec()).unwrap();
+    // encoder.finish().0
+    // unimplemented!()
+    // }
 }
 
 impl<const N: usize> Into<Vec<u8>> for InnerChunk<N> {
