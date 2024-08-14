@@ -9,6 +9,7 @@ COPY ./target/release/server .
 
 # Copy any other required files
 COPY ./public ./public
+COPY ./js ./js
 
 # Set the startup command to run your binary
 EXPOSE 3001
