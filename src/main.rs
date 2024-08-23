@@ -67,13 +67,14 @@ impl AppState {
 async fn main() {
     // console_subscriber::init();
 
+    let env_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
+            tracing_subscriber::EnvFilter::new(env_filter)
                 .add_directive("hyper=error".parse().unwrap())
                 .add_directive("tokio=error".parse().unwrap()),
         )
-        // .with_max_level(tracing::Level::ERROR)
         .with_target(false)
         .init();
 
