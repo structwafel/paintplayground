@@ -77,6 +77,8 @@ async fn main() {
         .with_target(false)
         .init();
 
+    startup_things().await;
+
     let chunk_saver = SimpleToFileSaver {};
 
     // start THE BoardManager
@@ -97,4 +99,12 @@ async fn main() {
     )
     .await
     .unwrap();
+}
+
+async fn startup_things() {
+    // create the canvas dir if it doesn't exist
+    let canvas_dir = "canvas";
+    if !std::path::Path::new(canvas_dir).exists() {
+        std::fs::create_dir(canvas_dir).unwrap();
+    }
 }
