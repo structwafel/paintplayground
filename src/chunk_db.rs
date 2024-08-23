@@ -46,12 +46,21 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         // load a chunk from the file system, if it doesn't exist create a new one
         debug!("Loading chunk at {:?}", coordinates);
 
-        let mut file = File::open(self.file_path(coordinates)).map_err(|err| {
-            ChunkLoaderSaverError::ChunkLoadError(format!(
-                "Error loading chunk at {:?}: {:?}",
-                coordinates, err
-            ))
-        })?;
+        let mut file = match File::open(self.file_path(coordinates)) {
+            Ok(f) => f,
+            Err(err) => match err {
+                err if err.kind() == std::io::ErrorKind::NotFound => {
+                    debug!("Chunk not found, creating new chunk at {:?}", coordinates);
+                    return Ok(Chunk::new());
+                }
+                _ => {
+                    return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
+                        "Error loading chunk at {:?}: {:?}",
+                        coordinates, err
+                    )))
+                }
+            },
+        };
 
         // read the file
         let mut buf = Vec::new();

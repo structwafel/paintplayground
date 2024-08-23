@@ -89,7 +89,7 @@ async fn main() {
 
     // run it with hyper
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
-    debug!("listening on {}", listener.local_addr().unwrap());
+    info!("listening on {}", listener.local_addr().unwrap());
 
     axum::serve(
         listener,
