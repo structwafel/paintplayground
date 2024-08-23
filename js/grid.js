@@ -130,6 +130,7 @@ export class Grid {
 
     addEventListeners() {
         this.gridContainer.addEventListener('click', (event) => {
+            event.preventDefault();
             if (event.target.classList.contains('gridBox')) {
                 this.handleColoring(event.target.id);
             }
@@ -141,6 +142,7 @@ export class Grid {
         });
 
         this.gridContainer.addEventListener('mousedown', (event) => {
+            event.preventDefault();
             if (event.button === 0) {
                 this.placemouseDown = true;
             } else if (event.button == 2) {
@@ -150,6 +152,7 @@ export class Grid {
         });
 
         this.gridContainer.addEventListener('mouseup', (event) => {
+            event.preventDefault();
             if (left_or_right(event.button)) {
                 this.placemouseDown = false;
                 this.movemouseDown = false;
@@ -157,6 +160,7 @@ export class Grid {
         });
 
         document.addEventListener('mouseup', (event) => {
+            event.preventDefault();
             if (left_or_right(event.button)) {
                 this.placemouseDown = false;
                 this.movemouseDown = false;
@@ -164,6 +168,7 @@ export class Grid {
         });
 
         this.gridContainer.addEventListener('mousemove', (event) => {
+            event.preventDefault();
             if (this.placemouseDown) {
                 this.handleColoring(event.target.id);
             } else if (this.movemouseDown) {
