@@ -9,8 +9,8 @@ const borderThickness = 30;
 export class Grid {
     constructor(coloringCallback) {
         this.cellSize = 10;
-        this.gridWidth = 1000;
-        this.gridHeight = 1000;
+        this.gridWidth = 2000;
+        this.gridHeight = 2000;
         this.scale = defaultGridScale;
         this.translation = { x: 0, y: 0 };
         this.lastColoredSquare = null;
@@ -54,7 +54,10 @@ export class Grid {
 
     colorBox(index, color) {
         const box = this.gridContainer.querySelector(`[id='${index}']`);
-        if (!box) return
+
+        if (!box) {
+            return
+        }
         box.style.backgroundColor = color;
     }
 

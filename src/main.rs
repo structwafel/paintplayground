@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, sync::atomic::AtomicUsize};
+use std::{
+    net::SocketAddr,
+    sync::{atomic::AtomicUsize, LazyLock},
+};
 
 use chunk_db::SimpleToFileSaver;
 use mimalloc::MiMalloc;
@@ -26,7 +29,21 @@ mod ws;
 
 use types::*;
 
-const CLEAR_BUFFER_INTERVAL: u64 = 1;
+const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 1;
+
+static CLEAR_BUFFER_INTERVAL: LazyLock<u64> = LazyLock::new(|| {
+    // Get the interval from the environment variable, or use the default
+    std::env::var("CLEAR_BUFFER_INTERVAL")
+        .unwrap_or_else(|_| {
+            info!(
+                "CLEAR_BUFFER_INTERVAL not set, using default: {}",
+                CLEAR_BUFFER_INTERVAL_DEFAULT
+            );
+            CLEAR_BUFFER_INTERVAL_DEFAULT.to_string()
+        })
+        .parse::<u64>()
+        .unwrap()
+});
 
 #[derive(Debug, Clone)]
 struct AppState {

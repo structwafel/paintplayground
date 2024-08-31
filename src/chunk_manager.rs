@@ -109,7 +109,8 @@ where
         loop {
             let mut smaller_buffer = Vec::new();
             changed = false;
-            let timeout = tokio::time::sleep(Duration::from_secs(crate::CLEAR_BUFFER_INTERVAL));
+
+            let timeout = tokio::time::sleep(Duration::from_secs(*crate::CLEAR_BUFFER_INTERVAL));
             tokio::pin!(timeout);
 
             loop {

@@ -6,23 +6,46 @@ export class Ws {
         this.y = y;
 
         this.applyColor = applyColoringUpdate;
-        const socket = this.connect_ws(x, y);
-        socket.onmessage = (event) => {
-            this.handleMessage(event.data);
-        }
 
-        this.socket = socket;
+        this.reconnectDelay = 1000; // initial delay
+
+        this.socket = this.connect_ws(x, y);
     }
 
     connect_ws(x, y) {
         const socket = new WebSocket(getWsUrl(x, y));
         socket.binaryType = 'arraybuffer';
-        socket.onopen = function () {
+        socket.onopen = () => {
+            this.updateConnectionStatus('green', 'Connected');
             console.log('WebSocket connection established');
+        };
+
+        socket.onmessage = (event) => {
+            this.handleMessage(event.data);
+        }
+
+        socket.onclose = () => {
+            console.log('WebSocket connection closed, attempting to reconnect...');
+            this.updateConnectionStatus('orange', 'Reconnecting...');
+            this.reconnect();
+        };
+
+        socket.onerror = () => {
+            console.log('WebSocket encountered an error');
+            this.updateConnectionStatus('red', 'Error');
         };
 
         return socket;
     }
+
+    reconnect() {
+        setTimeout(() => {
+            console.log('Reconnecting...');
+            this.socket = this.connect_ws(this.x, this.y);
+            this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // Exponential backoff, max 30 seconds
+        }, this.reconnectDelay);
+    }
+
 
     connect_and_extrac_ws(x, y) {
         const socket = this.connect_ws(x, y);
@@ -68,11 +91,14 @@ export class Ws {
                 break;
             // chunks updates, a packed u64 with 60bit index and 4bit color
             case 2:
+                console.log('Received chunk updates');
                 for (let i = 1; i < data.byteLength; i += 8) {
                     const packed = view.getBigUint64(i, true);
                     const index = Number(packed >> 4n);
-                    const color = Number(packed & 0b1111n);
-                    this.applyColor(index, color);
+
+                    const colorNumber = Number(packed & 0b1111n);
+
+                    this.applyColor(index, colorFromNumber(colorNumber));
                 }
                 break
             // chunk not found
@@ -89,7 +115,14 @@ export class Ws {
             default:
                 console.error('Unknown message type');
         }
+    }
 
+    updateConnectionStatus(color, text) {
+        const statusDiv = document.getElementById('connection_status');
+        if (statusDiv) {
+            statusDiv.style.backgroundColor = color;
+            statusDiv.textContent = text;
+        }
     }
 }
 
