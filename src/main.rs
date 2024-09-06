@@ -21,10 +21,12 @@ use tracing::debug;
 mod board_manager;
 mod chunk_db;
 mod chunk_manager;
+mod db;
 mod router;
 #[cfg(test)]
 mod tests;
 mod types;
+pub mod utils;
 mod ws;
 
 use types::*;
@@ -49,13 +51,15 @@ static CLEAR_BUFFER_INTERVAL: LazyLock<u64> = LazyLock::new(|| {
 struct AppState {
     pub board_communicator: board_manager::BoardManagerCommunicator,
     connections: Arc<AtomicUsize>,
+    db: db::DB,
 }
 
 impl AppState {
-    pub fn new(board_communicator: board_manager::BoardManagerCommunicator) -> Self {
+    pub fn new(board_communicator: board_manager::BoardManagerCommunicator, db: db::DB) -> Self {
         Self {
             board_communicator,
             connections: Arc::new(AtomicUsize::new(0)),
+            db,
         }
     }
 
@@ -97,13 +101,15 @@ async fn main() {
 
     startup_things().await;
 
+    let db = db::DB::new().await.unwrap();
+
     let chunk_saver = SimpleToFileSaver {};
 
     // start THE BoardManager
     let board_manager_communicator = board_manager::BoardManager::start(chunk_saver);
 
     // state of the application
-    let state = AppState::new(board_manager_communicator);
+    let state = AppState::new(board_manager_communicator, db);
 
     let app = router::all_routes(state);
 

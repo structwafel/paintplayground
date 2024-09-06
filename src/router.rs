@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
-    routing::{get, Route},
+    routing::{get, post, Route},
     Router,
 };
 use tower_http::{
@@ -10,9 +10,9 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
-use crate::board_manager::ChunkRequest;
 use crate::types::*;
 use crate::AppState;
+use crate::{board_manager::ChunkRequest, jwt, utils::password};
 
 pub fn all_routes(state: AppState) -> Router {
     let compression_layer = CompressionLayer::new().gzip(true);
@@ -22,6 +22,7 @@ pub fn all_routes(state: AppState) -> Router {
         .route("/ws/:x/:y", get(crate::ws::ws_handler))
         .route("/chunk/:x/:y", get(get_chunk))
         .route("/connections", get(get_connections))
+        .route("/login", post(login))
         // .layer(
         //     TraceLayer::new_for_http()
         //         .make_span_with(DefaultMakeSpan::default().include_headers(true)),
@@ -58,4 +59,38 @@ async fn get_chunk(
 
     // return the chunk in binary
     return Ok(chunk.clone().into());
+}
+
+#[derive(serde::Deserialize)]
+struct LoginData {
+    username: String,
+    password: String,
+}
+
+#[derive(serde::Serialize)]
+struct LoginResponse {
+    token: String,
+}
+
+async fn login(
+    login_data: axum::Json<LoginData>,
+    State(state): State<AppState>,
+) -> Result<axum::Json<LoginResponse>, impl IntoResponse> {
+    let password_data = state
+        .db
+        .get_user_password_by_user_id(&login_data.username)
+        .await
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or((axum::http::StatusCode::UNAUTHORIZED, "user not found"))?;
+
+    // check if the password is correct
+    password::verify_password(&login_data.password, &password_data)
+        .map_err(|_| (axum::http::StatusCode::UNAUTHORIZED, "password incorrect"))?;
+
+    let token = state
+        .jwt
+        .create_token(&user.id.to_string())
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(axum::Json(LoginResponse { token }))
 }

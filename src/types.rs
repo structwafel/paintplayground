@@ -6,10 +6,11 @@ pub use std::sync::Arc;
 use std::sync::LazyLock;
 
 use axum::response::IntoResponse;
+pub use sqlx::query;
+pub use sqlx::query_as;
 pub use tokio::sync::broadcast;
 pub use tokio::sync::mpsc;
 pub use tokio::sync::oneshot;
-
 pub use tracing::{debug, error, info, warn};
 
 // re-export common used types
@@ -236,7 +237,7 @@ impl<const N: usize> Into<Vec<u8>> for InnerChunk<N> {
 // pub type Board = Arc<RwLock<Chunk>>;
 
 /// Alway valid coordinates of a chunk
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ChunkCoordinates {
     x: i64,
     y: i64,

@@ -5,10 +5,12 @@ use axum::{
     },
     response::IntoResponse,
 };
+use axum_extra::TypedHeader;
 use futures::{
     sink::SinkExt,
     stream::{SplitSink, SplitStream, StreamExt},
 };
+use sqlx::query;
 use tracing::{debug, info};
 
 use crate::{board_manager, types::*};
@@ -19,8 +21,25 @@ pub async fn ws_handler(
     Path((x, y)): Path<(i64, i64)>,
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
+    TypedHeader(cookie): TypedHeader<axum_extra::headers::Cookie>,
 ) -> impl IntoResponse {
+    // validate jtw from cookie
+    let claims = match crate::utils::jwt::validate_jwt(&cookie).await {
+        Ok(claims) => claims,
+        Err(status) => return status.into_response(),
+    };
+
     // todo, check if the user is allowed to connect to this chunk
+    let user = query_as!(
+        crate::db::User,
+        "SELECT * FROM users WHERE id = $1",
+        claims.user_id
+    )
+    .fetch_one(&state.db.pool)
+    .await
+    .unwrap();
+
+    // check based on the user if they are allowed to get these coordinates
     let Ok(coordinates) = ChunkCoordinates::new(x, y) else {
         return axum::http::StatusCode::NOT_FOUND.into_response();
     };

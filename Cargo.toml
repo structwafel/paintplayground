@@ -28,10 +28,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 axum = { version = "0.7.5", features = ["macros", "ws"] }
 axum-macros = "0.4.1"
-axum-extra = { version = "0.9.3", features = ["typed-header"] }
+axum-extra = { version = "0.9.3", features = ["cookie", "typed-header"] }
 
 tower = { version = "0.4.13" }
-tower-http = { version = "0.5.2", features = ["fs", "trace", "compression-gzip"] }
+tower-http = { version = "0.5.2", features = [
+    "fs",
+    "trace",
+    "compression-gzip",
+] }
 
 serde = { version = "1.0.205", features = ["derive"] }
 serde_json = "1.0.122"
@@ -40,8 +44,18 @@ rand = "0.8.5"
 
 mimalloc = "0.1.43"
 # jemallocator = "0.5.4"
+
+
 # moka = { version = "0.12.8", features = ["future"] }
 dashmap = "6.0.1"
+
+# db stuff
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "uuid"] }
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+anyhow = "1.0.86"
+jsonwebtoken = "9.3.0"
+argon2 = "0.5.3"
+
 
 [dev-dependencies]
 reqwest = "0.12.5"
