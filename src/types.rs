@@ -292,8 +292,12 @@ pub struct CellChangeMessage {
 pub struct PackedCell(u64);
 
 impl PackedCell {
-    pub fn new(index: usize, value: u8) -> Self {
-        PackedCell(((index as u64) << 4) | (value as u64))
+    pub fn new(index: usize, value: u8) -> Option<Self> {
+        if index >= CHUNK_SIZE {
+            return None;
+        }
+        let color = Color::from_u8(value);
+        Some(PackedCell(((index as u64) << 4) | (color.to_u8() as u64)))
     }
 
     pub fn index(&self) -> usize {

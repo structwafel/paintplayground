@@ -125,12 +125,16 @@ impl WebSocketHandler {
                         let updates: Vec<PackedCell> = data
                             .chunks_exact(8)
                             .map(|chunk| {
+                                // in 8 bytes, we have the index and the value.
                                 let packed_value = u64::from_le_bytes(chunk.try_into().unwrap());
+                                // first 4 bits are the index
                                 let index = (packed_value >> 4) as usize;
+                                // last 58 bits are the color
                                 let color_number = (packed_value & 0xF) as u8;
 
                                 PackedCell::new(index, color_number)
                             })
+                            .filter_map(|x| x)
                             .collect();
                         debug!("received {} updates", updates.len());
                         update_tx.send(updates).await.unwrap();
