@@ -65,7 +65,7 @@ async fn spawn_client(who: usize) {
             let random_index = rand::random::<usize>() % 100;
             let random_color = rand::random::<u8>() % 9;
 
-            let packed_cell = PackedCell::new(random_index, random_color);
+            let packed_cell = PackedCell::new(random_index, random_color).unwrap();
 
             // In any websocket error, break loop.
 

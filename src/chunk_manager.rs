@@ -176,11 +176,12 @@ where
                     let byte_index = packed_index / 2;
                     let is_left = packed_index % 2 == 0;
 
-                    if is_left {
-                        self.chunk[byte_index].set_left(changes.value().into());
-                        // println!("Setting left {:?} to {:?}", byte_index, changes.value());
-                    } else {
-                        self.chunk[byte_index].set_right(changes.value().into());
+                    if let Some(chunk_color) = self.chunk.get_mut(byte_index) {
+                        if is_left {
+                            chunk_color.set_left(changes.value().into());
+                        } else {
+                            chunk_color.set_right(changes.value().into());
+                        }
                     }
                 }
             }

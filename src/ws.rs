@@ -144,7 +144,7 @@ impl WebSocketHandler {
                     axum::extract::ws::Message::Text(_) => {}
                     axum::extract::ws::Message::Pong(_) => {}
                     axum::extract::ws::Message::Close(_) => {
-                        info!("client closed the connection");
+                        debug!("client closed the connection");
                         break;
                     }
                 }
@@ -196,8 +196,7 @@ async fn handle_socket(socket: WebSocket, coordinates: ChunkCoordinates, state: 
         }
     }
 
-    info!("socket closed");
-
+    debug!("socket closed");
     // decrement the connections amount in appstate
     state.remove_connection();
 }
