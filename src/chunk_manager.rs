@@ -178,9 +178,16 @@ where
 
                     if let Some(chunk_color) = self.chunk.get_mut(byte_index) {
                         if is_left {
-                            chunk_color.set_left(changes.value().into());
+                            match changes.value().try_into() {
+                                Ok(color) => {
+                                    chunk_color.set_left(color);
+                                }
+                                Err(_) => {
+                                    // todo, handle error
+                                }
+                            }
                         } else {
-                            chunk_color.set_right(changes.value().into());
+                            chunk_color.set_right(changes.color());
                         }
                     }
                 }

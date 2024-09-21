@@ -12,14 +12,19 @@ if ! cargo check; then
   exit 1
 fi
 
+# Run cargo test to make sure the tests pass
+if ! cargo test; then
+  echo "Cargo test failed. Please fix the issues."
+  exit 1
+fi
+
 # Run cargo build
 if ! cargo build --release; then
   echo "Cargo build failed. Please fix the issues."
   exit 1
 fi
 
-# build image and push to docker hub, waiting for:
-# https://gitlab.com/groups/gitlab-org/-/epics/9727
+# build image and push to docker hub
 docker build -t canvas . --no-cache && \
 docker tag canvas lgxerxes/canvas && \
 docker push lgxerxes/canvas

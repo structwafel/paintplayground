@@ -22,6 +22,9 @@ pub struct SimpleToFileSaver {}
 
 impl SimpleToFileSaver {
     pub fn new() -> Self {
+        // if there is no canvas dir, create it
+        std::fs::create_dir_all("canvas").unwrap();
+
         Self {}
     }
 

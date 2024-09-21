@@ -36,56 +36,66 @@ pub static CHUNKS_IN_DIRECTION: LazyLock<usize> = LazyLock::new(|| {
 pub const MB: u64 = 1024 * 1024;
 pub const CACHE_SIZE: u64 = 100 * MB;
 
+#[repr(u8)]
 /// Represents the possible colors of a cell.
+///
+/// The colors are taken from the 4-bit RGB palette from Lospec.
+/// https://lospec.com/palette-list/4-bit-rgb
 pub enum Color {
-    Grey,
-    Red,
-    Green,
-    Blue,
-    Yellow,
-    Purple,
-    Orange,
-    Pink,
-    Brown,
-    Black,
+    Zero = 0b0000,
+    One = 0b0001,
+    Two = 0b0010,
+    Three = 0b0011,
+    Four = 0b0100,
+    Five = 0b0101,
+    Six = 0b0110,
+    Seven = 0b0111,
+    Eight = 0b1000,
+    Nine = 0b1001,
+    Ten = 0b1010,
+    Eleven = 0b1011,
+    Twelve = 0b1100,
+    Thirteen = 0b1101,
+    Fourteen = 0b1110,
+    Fifteen = 0b1111,
 }
 
 impl Color {
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => Color::Grey,
-            1 => Color::Red,
-            2 => Color::Green,
-            3 => Color::Blue,
-            4 => Color::Yellow,
-            5 => Color::Purple,
-            6 => Color::Orange,
-            7 => Color::Pink,
-            8 => Color::Brown,
-            9 => Color::Black,
-            _ => Color::Grey,
-        }
+    fn new(value: u8) -> Option<Self> {
+        Some(match value {
+            0 => Color::Zero,
+            1 => Color::One,
+            2 => Color::Two,
+            3 => Color::Three,
+            4 => Color::Four,
+            5 => Color::Five,
+            6 => Color::Six,
+            7 => Color::Seven,
+            8 => Color::Eight,
+            9 => Color::Nine,
+            10 => Color::Ten,
+            11 => Color::Eleven,
+            12 => Color::Twelve,
+            13 => Color::Thirteen,
+            14 => Color::Fourteen,
+            15 => Color::Fifteen,
+            _ => return None,
+        })
     }
 
-    fn to_u8(&self) -> u8 {
-        match self {
-            Color::Grey => 0,
-            Color::Red => 1,
-            Color::Green => 2,
-            Color::Blue => 3,
-            Color::Yellow => 4,
-            Color::Purple => 5,
-            Color::Orange => 6,
-            Color::Pink => 7,
-            Color::Brown => 8,
-            Color::Black => 9,
-        }
+    fn u8(self) -> u8 {
+        self as u8
     }
 }
 
-impl From<u8> for Color {
-    fn from(value: u8) -> Self {
-        Self::from_u8(value)
+impl TryFrom<u8> for Color {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match Color::new(value) {
+            Some(color) => Ok(color),
+            None => Err(()),
+        }
     }
 }
 
@@ -97,29 +107,30 @@ pub struct ChunkColor(u8);
 
 impl Default for ChunkColor {
     fn default() -> Self {
-        Self::new(Color::Grey, Color::Grey)
+        Self::new(Color::Zero, Color::Zero)
     }
 }
 
-impl From<u8> for ChunkColor {
-    fn from(value: u8) -> Self {
-        // first 4 bits are the left color, the last 4 bits are the right color
-        let left = Color::from_u8(value >> 4);
-        let right = Color::from_u8(value & 0b1111);
-        Self::new(left, right)
+impl TryFrom<u8> for ChunkColor {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match (Color::new(value >> 4), Color::new(value & 0b1111)) {
+            (Some(left), Some(right)) => Ok(Self::new(left, right)),
+            _ => Err(()),
+        }
     }
 }
 
 impl Into<u8> for ChunkColor {
     fn into(self) -> u8 {
-        debug!("doing into: {}", self.0);
         self.0
     }
 }
 
 impl ChunkColor {
     pub fn new(color1: Color, color2: Color) -> Self {
-        ChunkColor((color1.to_u8() << 4) | color2.to_u8())
+        ChunkColor(((color1 as u8) << 4) | color2 as u8)
     }
 
     // get the left color of the packed u8
@@ -137,11 +148,11 @@ impl ChunkColor {
     }
 
     pub fn set_left(&mut self, color: Color) {
-        self.0 = (color.to_u8() << 4) | (self.0 & 0b1111)
+        self.0 = (color.u8() << 4) | (self.0 & 0b1111)
     }
 
     pub fn set_right(&mut self, color: Color) {
-        self.0 = (self.0 & 0b11110000) | color.to_u8()
+        self.0 = (self.0 & 0b11110000) | color.u8()
     }
 }
 type ChunkArray<const N: usize> = [ChunkColor; N];
@@ -186,7 +197,9 @@ impl<const N: usize> From<Vec<u8>> for InnerChunk<N> {
         // Convert the vector into an array of ChunkColor
         let mut array = [ChunkColor::default(); N];
         for (i, byte) in value.into_iter().enumerate() {
-            array[i] = byte.into();
+            if let Ok(color) = byte.try_into() {
+                array[i] = color;
+            }
         }
 
         Self(Arc::new(array))
@@ -286,6 +299,8 @@ pub struct CellChangeMessage {
 
 /// packed cell is an index and value packed into a u64
 ///
+/// index is 60 bits, value is 4 bits
+///
 /// * this could be less thas u64
 /// ! change the case 2 of index.html when changeing the size
 #[derive(Debug, Clone)]
@@ -296,8 +311,11 @@ impl PackedCell {
         if index >= CHUNK_SIZE {
             return None;
         }
-        let color = Color::from_u8(value);
-        Some(PackedCell(((index as u64) << 4) | (color.to_u8() as u64)))
+        if let Some(color) = Color::new(value) {
+            Some(PackedCell(((index as u64) << 4) | (color.u8() as u64)))
+        } else {
+            None
+        }
     }
 
     pub fn index(&self) -> usize {
@@ -306,6 +324,11 @@ impl PackedCell {
 
     pub fn value(&self) -> u8 {
         (self.0 & 0xF) as u8
+    }
+
+    // we know that the value is a valid color
+    pub fn color(&self) -> Color {
+        Color::new(self.value()).unwrap()
     }
 
     pub fn to_binary(&self) -> [u8; 8] {
@@ -378,16 +401,16 @@ mod testing {
         // check that it is 00000000
         assert_eq!(chunk_color.0, 0b00000000);
 
-        chunk_color.set_left(Color::Brown);
+        chunk_color.set_left(Color::Ten);
 
-        assert_eq!(chunk_color.left(), Color::Brown.to_u8());
+        assert_eq!(chunk_color.left(), Color::Ten.u8());
         // right should be untouched
-        assert_eq!(chunk_color.right(), Color::Grey.to_u8());
+        assert_eq!(chunk_color.right(), Color::Zero.u8());
 
-        chunk_color.set_right(Color::Blue);
-        assert_eq!(chunk_color.right(), Color::Blue.to_u8());
+        chunk_color.set_right(Color::Twelve);
+        assert_eq!(chunk_color.right(), Color::Twelve.u8());
         // left should be untouchedm
-        assert_eq!(chunk_color.left(), Color::Brown.to_u8());
+        assert_eq!(chunk_color.left(), Color::Ten.u8());
     }
 
     // test if loading and saving the chunk gives you the same chunk
@@ -397,9 +420,9 @@ mod testing {
         let coordinates = ChunkCoordinates::new(0, 0).unwrap();
 
         // edit some values in the chunk
-        chunk[0].set_left(Color::Brown);
-        chunk[CHUNK_BYTE_SIZE - 1].set_right(Color::Blue);
-        chunk[CHUNK_BYTE_SIZE / 2].set_left(Color::Black);
+        chunk[0].set_left(Color::Ten);
+        chunk[CHUNK_BYTE_SIZE - 1].set_right(Color::Eight);
+        chunk[CHUNK_BYTE_SIZE / 2].set_left(Color::One);
 
         let saver = SimpleToFileSaver::new();
         saver.save_chunk(chunk.clone(), coordinates);
@@ -417,9 +440,9 @@ mod testing {
     fn chunk_to_vec() {
         init_tracing();
         let mut chunk = SmallChunkArray::default();
-        chunk[0].set_left(Color::Brown);
-        chunk[1].set_right(Color::Blue);
-        chunk[4].set_left(Color::Black);
+        chunk[0].set_left(Color::Ten);
+        chunk[1].set_right(Color::Eight);
+        chunk[4].set_left(Color::One);
 
         let vec = chunk.clone().to_u8vec();
         let chunk2 = SmallChunkArray::from(vec);
