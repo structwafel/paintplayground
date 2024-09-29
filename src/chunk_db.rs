@@ -29,7 +29,7 @@ impl SimpleToFileSaver {
     }
 
     fn file_path(&self, coordinates: ChunkCoordinates) -> String {
-        format!("canvas/{}-{}.chunk", coordinates.x(), coordinates.y())
+        format!("canvas/{}_{}.chunk", coordinates.x(), coordinates.y())
     }
 }
 

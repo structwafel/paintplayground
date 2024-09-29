@@ -15,5 +15,6 @@ impl Screenshot {
 
     pub fn save(&self) {
         // todo
+        // each
     }
 }
