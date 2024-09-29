@@ -178,8 +178,22 @@ where
                 let handler = self
                     .chunks
                     .get(&coordinates)
-                    .map(|entry| entry.value().clone())?;
-                Some(handler.fetch_chunk().await)
+                    .map(|entry| entry.value().clone());
+
+                if let Some(handler) = handler {
+                    return Some(handler.fetch_chunk().await);
+                } else {
+                    // get from storage
+                    let chunk = self
+                        .chunks_loader_saver
+                        .load_chunk(coordinates)
+                        .map_err(|err| {
+                            error!("loading error setting default: {:?}", err);
+                        })
+                        .ok()?;
+
+                    return Some(chunk);
+                }
             }
         }
     }
@@ -214,5 +228,15 @@ where
 
     fn chunks_loaded(&self) -> u64 {
         self.chunks_loaded.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+
+    async fn screenshot(&self) {
+        // let mut screenshot = Screenshot::new();
+        // for (coords, handler) in self.chunks.iter() {
+        //     let chunk = handler.fetch_chunk().await;
+        //     screenshot.add_chunk(coords, chunk);
+        // }
+        // screenshot.save();
     }
 }

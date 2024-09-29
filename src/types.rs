@@ -318,6 +318,14 @@ impl PackedCell {
         }
     }
 
+    pub fn new_from_u64(packed_value: u64) -> Option<Self> {
+        let index = (packed_value >> 4) as usize;
+        // last 58 bits are the color
+        let value = (packed_value & 0xF) as u8;
+
+        Self::new(index, value)
+    }
+
     pub fn index(&self) -> usize {
         (self.0 >> 4) as usize
     }

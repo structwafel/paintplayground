@@ -22,6 +22,7 @@ mod board_manager;
 mod chunk_db;
 mod chunk_manager;
 mod router;
+mod screenshot;
 #[cfg(test)]
 mod tests;
 mod types;
