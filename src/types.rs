@@ -21,15 +21,19 @@ pub const CHUNK_SIZE: usize = CHUNK_LENGTH * CHUNK_LENGTH;
 pub const CHUNK_BYTE_SIZE: usize = CHUNK_SIZE / 2;
 
 // get this from env
-pub static CHUNKS_IN_DIRECTION: LazyLock<usize> = LazyLock::new(|| {
-    env::var("CHUNKS_IN_DIRECTION")
+pub static CHUNKS_IN_DIRECTION: LazyLock<i64> = LazyLock::new(|| {
+    let number = env::var("CHUNKS_IN_DIRECTION")
         .unwrap_or({
             info!("CHUNKS_IN_DIRECTION not set, using 10");
             "10".to_string()
         })
         // .expect("CHUNKS_IN_DIRECTION environment variable not set")
         .parse()
-        .expect("CHUNKS_IN_DIRECTION is not a unsigned number")
+        .expect("CHUNKS_IN_DIRECTION is not a unsigned number");
+    if number < 0 {
+        panic!("CHUNKS_IN_DIRECTION cannot be negative")
+    }
+    number
 });
 // pub const CHUNKS: usize = CHUNKS_IN_DIRECTION * CHUNKS_IN_DIRECTION;
 
@@ -161,6 +165,15 @@ type ChunkArray<const N: usize> = [ChunkColor; N];
 pub type Chunk = InnerChunk<{ CHUNK_SIZE / 2 }>;
 #[cfg(test)]
 type SmallChunkArray = InnerChunk<5>;
+
+impl Chunk {
+    pub fn row_of_colors(&self, x: usize) -> [ChunkColor; CHUNK_LENGTH / 2] {
+        //
+        self.0[x * CHUNK_LENGTH / 2..x * CHUNK_LENGTH / 2 + CHUNK_LENGTH - 1]
+            .try_into()
+            .unwrap()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct InnerChunk<const N: usize>(Arc<ChunkArray<N>>);
