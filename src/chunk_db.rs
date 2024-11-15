@@ -60,39 +60,39 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         let path = self.file_path(coordinates);
         info!("Loading chunk from {:?}", path);
 
-        let mut file = match File::open(self.file_path(coordinates)) {
-            Ok(f) => {
+        let buf = match File::open(&path) {
+            Ok(mut file) => {
                 info!("Chunk found at {:?}", coordinates);
-                f
-            }
-            Err(err) => match err {
-                err if err.kind() == std::io::ErrorKind::NotFound => {
-                    if !create_new {
-                        return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
-                            "No chunk found"
-                        )));
-                    }
-                    debug!("Chunk not found, creating new chunk at {:?}", coordinates);
-                    return Ok(Chunk::new());
-                }
-                _ => {
-                    return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
-                        "Error loading chunk at {:?}: {:?}",
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf).map_err(|err| {
+                    ChunkLoaderSaverError::ChunkLoadError(format!(
+                        "Error reading chunk at {:?}: {:?}",
                         coordinates, err
-                    )))
+                    ))
+                })?;
+                Some(buf)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if !create_new {
+                    return Err(ChunkLoaderSaverError::ChunkLoadError(
+                        "No chunk found".to_string(),
+                    ));
                 }
-            },
+                debug!("Chunk not found, creating new chunk at {:?}", coordinates);
+                None
+            }
+            Err(err) => {
+                return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
+                    "Error loading chunk at {:?}: {:?}",
+                    coordinates, err
+                )))
+            }
         };
 
-        // read the file
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf).map_err(|err| {
-            ChunkLoaderSaverError::ChunkLoadError(format!(
-                "Error reading chunk at {:?}: {:?}",
-                coordinates, err
-            ))
-        })?;
-        Ok(buf.into())
+        Ok(match buf {
+            Some(data) => data.into(),
+            None => Chunk::new(),
+        })
     }
 }
 
