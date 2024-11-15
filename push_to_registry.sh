@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Check if we're on main branch
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  echo "Not on main branch. Current branch: $CURRENT_BRANCH"
+  echo "Please switch to main branch first."
+  exit 1
+fi
+
 # Check if the git repository is dirty
 if [[ -n $(git status --porcelain) ]]; then
   echo "Git repository is dirty. Please commit or stash your changes."
