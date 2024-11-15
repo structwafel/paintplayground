@@ -79,7 +79,7 @@ async fn screenshot_handler(
 ) -> Result<impl IntoResponse, impl IntoResponse> {
     let ScreenshotQuery { x, y, x2, y2, q } = params;
     let (x2, y2) = (x2.unwrap_or(x), y2.unwrap_or(y));
-    let q = q.unwrap_or(4).max(32);
+    let q = q.unwrap_or(4).min(32);
 
     if x > x2 || y < y2 {
         debug!("Invalid coordinates: x={} y={} x2={} y2={}", x, y, x2, y2);
