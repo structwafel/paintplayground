@@ -58,11 +58,11 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         debug!("Loading chunk at {:?}", coordinates);
 
         let path = self.file_path(coordinates);
-        info!("Loading chunk from {:?}", path);
+        debug!("Loading chunk from {:?}", path);
 
         let buf = match File::open(&path) {
             Ok(mut file) => {
-                info!("Chunk found at {:?}", coordinates);
+                debug!("Chunk found at {:?}", coordinates);
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).map_err(|err| {
                     ChunkLoaderSaverError::ChunkLoadError(format!(
