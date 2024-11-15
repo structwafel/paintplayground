@@ -1,9 +1,11 @@
+#![allow(unused)]
 use std::{
+    env,
     net::SocketAddr,
     sync::{atomic::AtomicUsize, LazyLock},
 };
 
-use chunk_db::SimpleToFileSaver;
+use chunk_db::{ChunkLoaderSaver, SimpleToFileSaver};
 use mimalloc::MiMalloc;
 
 // When alot of connections are made at the same time, default allocator doesn't release the memory at all.
@@ -84,6 +86,20 @@ impl AppState {
 #[tokio::main]
 async fn main() {
     // console_subscriber::init();
+
+    let args: Vec<String> = env::args().collect();
+
+    if let Some(first_arg) = args.get(1) {
+        if first_arg == "plot" {
+            let chunks_in_direction = *CHUNKS_IN_DIRECTION;
+            screenshot::Screenshot::from_coordinates(
+                ChunkCoordinates::new(-chunks_in_direction, chunks_in_direction).unwrap(),
+                ChunkCoordinates::new(chunks_in_direction, -chunks_in_direction).unwrap(),
+            )
+            .save(8, "screenshot.png");
+            return;
+        }
+    }
 
     let env_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     println!("env_filter: {}", env_filter);

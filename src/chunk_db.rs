@@ -8,7 +8,11 @@ use crate::types::*;
 // todo, these should probably return errors
 pub trait ChunkLoaderSaver: Send + Sync + Debug {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError>;
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError>;
 }
 
 #[derive(Debug)]
@@ -45,41 +49,50 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         file.write_all(&chunk.to_u8vec()).unwrap();
     }
 
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError> {
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError> {
         // load a chunk from the file system, if it doesn't exist create a new one
         debug!("Loading chunk at {:?}", coordinates);
 
         let path = self.file_path(coordinates);
-        info!("Loading chunk from {:?}", path);
+        debug!("Loading chunk from {:?}", path);
 
-        let mut file = match File::open(self.file_path(coordinates)) {
-            Ok(f) => {
-                info!("Chunk found at {:?}", coordinates);
-                f
-            }
-            Err(err) => match err {
-                err if err.kind() == std::io::ErrorKind::NotFound => {
-                    debug!("Chunk not found, creating new chunk at {:?}", coordinates);
-                    return Ok(Chunk::new());
-                }
-                _ => {
-                    return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
-                        "Error loading chunk at {:?}: {:?}",
+        let buf = match File::open(&path) {
+            Ok(mut file) => {
+                debug!("Chunk found at {:?}", coordinates);
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf).map_err(|err| {
+                    ChunkLoaderSaverError::ChunkLoadError(format!(
+                        "Error reading chunk at {:?}: {:?}",
                         coordinates, err
-                    )))
+                    ))
+                })?;
+                Some(buf)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if !create_new {
+                    return Err(ChunkLoaderSaverError::ChunkLoadError(
+                        "No chunk found".to_string(),
+                    ));
                 }
-            },
+                debug!("Chunk not found, creating new chunk at {:?}", coordinates);
+                None
+            }
+            Err(err) => {
+                return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
+                    "Error loading chunk at {:?}: {:?}",
+                    coordinates, err
+                )))
+            }
         };
 
-        // read the file
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf).map_err(|err| {
-            ChunkLoaderSaverError::ChunkLoadError(format!(
-                "Error reading chunk at {:?}: {:?}",
-                coordinates, err
-            ))
-        })?;
-        Ok(buf.into())
+        Ok(match buf {
+            Some(data) => data.into(),
+            None => Chunk::new(),
+        })
     }
 }
 
@@ -88,7 +101,11 @@ pub struct SimpleInMemoryLoader {}
 impl ChunkLoaderSaver for SimpleInMemoryLoader {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {}
 
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError> {
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError> {
         todo!()
     }
 }

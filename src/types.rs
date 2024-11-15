@@ -21,27 +21,33 @@ pub const CHUNK_SIZE: usize = CHUNK_LENGTH * CHUNK_LENGTH;
 pub const CHUNK_BYTE_SIZE: usize = CHUNK_SIZE / 2;
 
 // get this from env
-pub static CHUNKS_IN_DIRECTION: LazyLock<usize> = LazyLock::new(|| {
-    env::var("CHUNKS_IN_DIRECTION")
+pub static CHUNKS_IN_DIRECTION: LazyLock<i64> = LazyLock::new(|| {
+    let number = env::var("CHUNKS_IN_DIRECTION")
         .unwrap_or({
             info!("CHUNKS_IN_DIRECTION not set, using 10");
             "10".to_string()
         })
         // .expect("CHUNKS_IN_DIRECTION environment variable not set")
         .parse()
-        .expect("CHUNKS_IN_DIRECTION is not a unsigned number")
+        .expect("CHUNKS_IN_DIRECTION is not a unsigned number");
+    if number < 0 {
+        panic!("CHUNKS_IN_DIRECTION cannot be negative")
+    }
+    number
 });
 // pub const CHUNKS: usize = CHUNKS_IN_DIRECTION * CHUNKS_IN_DIRECTION;
 
 pub const MB: u64 = 1024 * 1024;
 pub const CACHE_SIZE: u64 = 100 * MB;
 
+#[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 /// Represents the possible colors of a cell.
 ///
 /// The colors are taken from the 4-bit RGB palette from Lospec.
-/// https://lospec.com/palette-list/4-bit-rgb
+/// https://lospec.com/palette-list/woodspark
 pub enum Color {
+    ///  #e0d3c8
     Zero = 0b0000,
     One = 0b0001,
     Two = 0b0010,
@@ -85,6 +91,28 @@ impl Color {
 
     fn u8(self) -> u8 {
         self as u8
+    }
+
+    /// this color as the rgb value from the pallet
+    pub fn to_rgb(&self) -> (u8, u8, u8) {
+        match self {
+            Color::Zero => (224, 211, 200),
+            Color::One => (245, 238, 176),
+            Color::Two => (250, 191, 97),
+            Color::Three => (224, 141, 81),
+            Color::Four => (138, 88, 101),
+            Color::Five => (69, 43, 63),
+            Color::Six => (44, 94, 59),
+            Color::Seven => (96, 156, 79),
+            Color::Eight => (198, 204, 84),
+            Color::Nine => (120, 194, 214),
+            Color::Ten => (84, 121, 176),
+            Color::Eleven => (86, 84, 110),
+            Color::Twelve => (131, 158, 166),
+            Color::Thirteen => (240, 91, 91),
+            Color::Fourteen => (143, 50, 95),
+            Color::Fifteen => (235, 108, 152),
+        }
     }
 }
 
@@ -140,11 +168,19 @@ impl ChunkColor {
         self.0 >> 4
     }
 
+    pub fn left_color(&self) -> Color {
+        Color::new(self.left()).unwrap()
+    }
+
     // get the right color of the packed u8
     //
     // ----xxxx
     pub fn right(&self) -> u8 {
         self.0 & 0b1111
+    }
+
+    pub fn right_color(&self) -> Color {
+        Color::new(self.right()).unwrap()
     }
 
     pub fn set_left(&mut self, color: Color) {
@@ -161,6 +197,19 @@ type ChunkArray<const N: usize> = [ChunkColor; N];
 pub type Chunk = InnerChunk<{ CHUNK_SIZE / 2 }>;
 #[cfg(test)]
 type SmallChunkArray = InnerChunk<5>;
+
+impl Chunk {
+    pub fn row_of_colors(&self, x: usize) -> Vec<Color> {
+        let start = x * (CHUNK_LENGTH / 2);
+        let end = start + (CHUNK_LENGTH / 2);
+
+        // Collect both left and right colors for the entire row
+        self.0[start..end]
+            .iter()
+            .flat_map(|chunk_color| vec![chunk_color.left_color(), chunk_color.right_color()])
+            .collect()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct InnerChunk<const N: usize>(Arc<ChunkArray<N>>);
@@ -435,7 +484,7 @@ mod testing {
         let saver = SimpleToFileSaver::new();
         saver.save_chunk(chunk.clone(), coordinates);
 
-        let loaded_chunk = saver.load_chunk(coordinates).unwrap();
+        let loaded_chunk = saver.load_chunk(coordinates, true).unwrap();
 
         chunk.iter().zip(loaded_chunk.iter()).for_each(|(a, b)| {
             assert_eq!((a.left(), a.right()), (b.left(), b.right()),);

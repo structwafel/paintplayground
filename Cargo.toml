@@ -42,6 +42,8 @@ mimalloc = "0.1.43"
 # jemallocator = "0.5.4"
 # moka = { version = "0.12.8", features = ["future"] }
 dashmap = "6.0.1"
+image = "0.25.5"
+png = "0.17.14"
 
 [dev-dependencies]
 reqwest = "0.12.5"
