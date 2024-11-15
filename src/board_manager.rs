@@ -168,7 +168,7 @@ where
         match request_type {
             ChunkRequest::Storage => self
                 .chunks_loader_saver
-                .load_chunk(coordinates)
+                .load_chunk(coordinates, true)
                 .map_err(|err| {
                     error!("loading error setting default: {:?}", err);
                 })
@@ -186,7 +186,7 @@ where
                     // get from storage
                     let chunk = self
                         .chunks_loader_saver
-                        .load_chunk(coordinates)
+                        .load_chunk(coordinates, true)
                         .map_err(|err| {
                             error!("loading error setting default: {:?}", err);
                         })
@@ -210,7 +210,7 @@ where
                     self.chunks_loaded
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                    Ok(ChunkManager::new(
+                    Ok(ChunkManager::create(
                         coordinates,
                         self.chunks_loader_saver.clone(),
                         self.chunk_m_updates_tx.clone(),
@@ -229,7 +229,6 @@ where
     fn chunks_loaded(&self) -> u64 {
         self.chunks_loaded.load(std::sync::atomic::Ordering::SeqCst)
     }
-
 
     async fn screenshot(&self) {
         // let mut screenshot = Screenshot::new();

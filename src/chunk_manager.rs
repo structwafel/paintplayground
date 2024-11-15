@@ -48,7 +48,7 @@ where
     /// Create a new chunk manager
     ///
     /// And start it in a new thread, where it will handle updates to/from the chunk
-    pub fn new(
+    pub fn create(
         coordinates: ChunkCoordinates,
         chunk_saver: Arc<T>,
         chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
@@ -67,7 +67,7 @@ where
         };
 
         let chunk = chunk_saver
-            .load_chunk(coordinates)
+            .load_chunk(coordinates, true)
             .map_err(|err| {
                 error!("loading error setting default: {:?}", err);
             })

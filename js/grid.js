@@ -1,4 +1,4 @@
-import { selectedColor } from "./color.js";
+import { colorFromNumber, colorMapping, selectedColor } from "./color.js";
 
 function left_or_right(button) {
     return (button === 0 || button === 2);
@@ -64,7 +64,7 @@ export class Grid {
     handleColoring(index) {
         if (index !== this.lastColoredSquare) {
             this.coloringCallback(index, selectedColor);
-            this.colorBox(index, selectedColor);
+            this.colorBox(index, colorFromNumber(colorMapping[selectedColor]));
         }
     }
 

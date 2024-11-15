@@ -68,7 +68,7 @@ export class Ws {
     }
 
     handleMessage(data) {
-        console.log('Received message with length', data.byteLength / 8);
+        // console.log('Received message with length', data.byteLength / 8);
         // all will be binary.
         const view = new DataView(data);
         const messageType = view.getUint8(0);

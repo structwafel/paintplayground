@@ -73,25 +73,40 @@
             left: 0;
             transform: translateY(-50%);
         }
+
+        .colorButton {
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            border: none;
+        }
+
     </style>
 </head>
 
 <body>
     <div>
         <h1>WebSocket Color Grid</h1>
+        <p>---Click/Hold LeftClick: Paint--- ---Hold RightClick: pan--- ---Scroll: Zoom---</p>
         <div id="connection_status">Status: Not connected</div>
         <div id="location">Current location: (0,0)</div>
         <div id="color-picker">
-            <button id="grey">Grey- do not use</button>
-            <button id="red">Red</button>
-            <button id="green">Green</button>
-            <button id="blue">Blue</button>
-            <button id="yellow">Yellow</button>
-            <button id="purple">Purple</button>
-            <button id="orange">Orange</button>
-            <button id="pink">Pink</button>
-            <button id="brown">Brown</button>
-            <button id="black">Black</button>
+            <button class="colorButton" id="zero">   </button>
+            <button class="colorButton" id="one">   </button>
+            <button class="colorButton" id="two">   </button>
+            <button class="colorButton" id="three">   </button>
+            <button class="colorButton" id="four">   </button>
+            <button class="colorButton" id="five">   </button>
+            <button class="colorButton" id="six">   </button>
+            <button class="colorButton" id="seven">   </button>
+            <button class="colorButton" id="eight">   </button>
+            <button class="colorButton" id="nine">   </button>
+            <button class="colorButton" id="ten">   </button>
+            <button class="colorButton" id="eleven">   </button>
+            <button class="colorButton" id="twelve">   </button>
+            <button class="colorButton" id="thirteen">   </button>
+            <button class="colorButton" id="fourteen">   </button>
+            <button class="colorButton" id="fifteen">   </button>
 
         </div>
     </div>
@@ -103,6 +118,21 @@
         <div id="gridContainer"></div>
     </div>
     <script type="module" src="stuff.js"></script>
+    <script type="module">
+        import { selectedColor, colorMapping, colorFromNumber } from './js/color.js';
+
+        // document.getElementById('color-picker').addEventListener('click', function (event) {
+        //     selectedColor = event.target.id;
+        // });
+
+        // Set the background color of the color buttons
+        Object.keys(colorMapping).forEach(key => {
+            const button = document.getElementById(key);
+            if (button) {
+                button.style.backgroundColor = colorFromNumber(colorMapping[key]);
+            }
+        });
+    </script>
 </body>
 
 </html>

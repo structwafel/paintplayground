@@ -1,40 +1,58 @@
-export let selectedColor = 'red';
+export let selectedColor = 'one';
 export const colorMapping = {
-    'grey': 0,
-    'red': 1,
-    'green': 2,
-    'blue': 3,
-    'yellow': 4,
-    'purple': 5,
-    'orange': 6,
-    'pink': 7,
-    'brown': 8,
-    'black': 9
+    'zero': 0,
+    'one': 1,
+    'two': 2,
+    'three': 3,
+    'four': 4,
+    'five': 5,
+    'six': 6,
+    'seven': 7,
+    'eight': 8,
+    'nine': 9,
+    'ten': 10,
+    'eleven': 11,
+    'twelve': 12,
+    'thirteen': 13,
+    'fourteen': 14,
+    'fifteen': 15
 };
 export function colorFromNumber(number) {
     switch (number) {
         case 0:
-            return 'grey';
+            return "#e0d3c8";
         case 1:
-            return 'red';
+            return '#f5eeb0';
         case 2:
-            return 'green';
+            return '#fabf61';
         case 3:
-            return 'blue';
+            return '#e08d51';
         case 4:
-            return 'yellow';
+            return '#8a5865';
         case 5:
-            return 'purple';
+            return '#452b3f';
         case 6:
-            return 'orange';
+            return '#2c5e3b';
         case 7:
-            return 'pink';
+            return '#609c4f';
         case 8:
-            return 'brown';
+            return '#c6cc54';
         case 9:
-            return 'black';
+            return '#78c2d6';
+        case 10:
+            return '#5479b0';
+        case 11:
+            return '#56546e';
+        case 12:
+            return '#839fa6';
+        case 13:
+            return '#f05b5b';
+        case 14:
+            return '#8f325f';
+        case 15:
+            return '#eb6c98';
         default:
-            return 'grey';
+            return '#e0d3c8';
     }
 }
 document.getElementById('color-picker').addEventListener('click', function (event) {

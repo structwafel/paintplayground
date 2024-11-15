@@ -8,7 +8,11 @@ use crate::types::*;
 // todo, these should probably return errors
 pub trait ChunkLoaderSaver: Send + Sync + Debug {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError>;
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError>;
 }
 
 #[derive(Debug)]
@@ -45,7 +49,11 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         file.write_all(&chunk.to_u8vec()).unwrap();
     }
 
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError> {
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError> {
         // load a chunk from the file system, if it doesn't exist create a new one
         debug!("Loading chunk at {:?}", coordinates);
 
@@ -59,6 +67,11 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
             }
             Err(err) => match err {
                 err if err.kind() == std::io::ErrorKind::NotFound => {
+                    if !create_new {
+                        return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
+                            "No chunk found"
+                        )));
+                    }
                     debug!("Chunk not found, creating new chunk at {:?}", coordinates);
                     return Ok(Chunk::new());
                 }
@@ -88,7 +101,11 @@ pub struct SimpleInMemoryLoader {}
 impl ChunkLoaderSaver for SimpleInMemoryLoader {
     fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {}
 
-    fn load_chunk(&self, coordinates: ChunkCoordinates) -> Result<Chunk, ChunkLoaderSaverError> {
+    fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError> {
         todo!()
     }
 }
