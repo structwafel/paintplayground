@@ -82,6 +82,7 @@ export class ChunkManager {
 
         this.ws.move(x, y);
         this.changeLocationText(this.ws.x, this.ws.y);
+        this.changeDownloadText(this.ws.x, this.ws.y);
         this.allowUpdates = true;
     }
 
@@ -89,4 +90,9 @@ export class ChunkManager {
         const locationText = document.getElementById("location");
         locationText.innerText = `Current location: (${x}, ${y})`;
     }
+    changeDownloadText(x, y) {
+        const downloadLink = document.getElementById("downloadLink");
+        downloadLink.href = `https://canvas.structwafel.dev/screenshot?x=${x}&y=${y}`;
+    }
 }
+
