@@ -31,8 +31,8 @@
         }
 
         #parendGridContainer {
-            width: 1070px;
-            height: 1070px;
+            width: 80vh;
+            height: 80vh;
             position: relative;
             overflow: hidden;
             border: 1px solid black;
@@ -89,7 +89,10 @@
         <h1>WebSocket Color Grid</h1>
         <p>---Click/Hold LeftClick: Paint--- ---Hold RightClick: pan--- ---Scroll: Zoom---</p>
         <div id="connection_status">Status: Not connected</div>
-        <div id="location">Current location: (0,0)</div>
+        <div style="display:flex">
+            <div id="location" style="padding-right:10px">Current location: (0,0)</div>
+        <a id="downloadLink" href="https://canvas.structwafel.dev/screenshot?x=0&y=0" download="0_0.png" target="_blank"><button id="download">Download This</button></a>
+        </div>
         <div id="color-picker">
             <button class="colorButton" id="zero">   </button>
             <button class="colorButton" id="one">   </button>
