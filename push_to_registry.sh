@@ -8,9 +8,12 @@ if [[ "$CURRENT_BRANCH" != "main" ]]; then
   exit 1
 fi
 
+# get latest main
+git pull
+
 # Check if the git repository is dirty
 if [[ -n $(git status --porcelain) ]]; then
-  echo "Git repository is dirty. Please commit or stash your changes."
+  echo "git repo is dirty, only push to registry from proper main"
   exit 1
 fi
 
@@ -33,10 +36,11 @@ if ! cargo build --release; then
 fi
 
 # build image and push to docker hub
-docker build -t canvas . --no-cache && \
-docker tag canvas lgxerxes/canvas && \
-docker push lgxerxes/canvas
+docker build -t canvas . --no-cache &&
+  docker tag canvas lgxerxes/canvas &&
+  docker push lgxerxes/canvas
 
 # Build and push the Docker image
 # docker build -t registry.gitlab.com/structwafel/paintsandbox . --no-cache && \
 # docker push registry.gitlab.com/structwafel/paintsandbox
+
