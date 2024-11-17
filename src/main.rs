@@ -32,7 +32,7 @@ mod ws;
 
 use types::*;
 
-const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 1;
+const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 500;
 
 static CLEAR_BUFFER_INTERVAL: LazyLock<u64> = LazyLock::new(|| {
     // Get the interval from the environment variable, or use the default

@@ -10,8 +10,8 @@ use tungstenite::{
 
 use crate::types::*;
 
-const SERVER: &str = "ws://127.0.0.1:3001/ws";
-const TIMEOUT: u64 = 1000;
+const SERVER: &str = "ws://localhost:3001/ws/0/0";
+const TIMEOUT: u64 = 10;
 
 pub async fn spawn_clients(n: usize) {
     let mut clients = Vec::new();
@@ -62,8 +62,8 @@ async fn spawn_client(who: usize) {
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
         loop {
-            let random_index = rand::random::<usize>() % 100;
-            let random_color = rand::random::<u8>() % 9;
+            let random_index = rand::random::<usize>() % 10_000;
+            let random_color = rand::random::<u8>() % 15;
 
             let packed_cell = PackedCell::new(random_index, random_color).unwrap();
 
