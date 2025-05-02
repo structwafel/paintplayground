@@ -18,7 +18,7 @@ async fn main() {
         return;
     } else {
         // default
-        100
+        1000
     };
 
     // Call the client function with args
