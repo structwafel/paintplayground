@@ -1,16 +1,22 @@
-FROM gcr.io/distroless/cc
+FROM rust:1.86-slim-bookworm as builder
 
-# Set the working directory
+WORKDIR /app
+
+COPY ./src ./src
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./Cargo.lock ./Cargo.lock
+
+RUN cargo build --release
+
+# Stage 2: Runtime
+FROM gcr.io/distroless/cc-debian12
+
 WORKDIR /workserver
 
-# Copy the pre-built binary
-COPY ./target/release/server .
-# COPY ./target/x86_64-unknown-linux-musl/release/server .
+COPY --from=builder /app/target/release/server ./server
 
-# Copy any other required files
 COPY ./public ./public
 COPY ./js ./js
 
-# Set the startup command to run your binary
 EXPOSE 3001
 CMD ["./server"]
