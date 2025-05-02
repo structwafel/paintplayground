@@ -29,11 +29,11 @@ if ! cargo test; then
   exit 1
 fi
 
-# Run cargo build
-if ! cargo build --release; then
-  echo "Cargo build failed. Please fix the issues."
-  exit 1
-fi
+# Run cargo build, now done in dockerfile
+# if ! cargo build --release; then
+#   echo "Cargo build failed. Please fix the issues."
+#   exit 1
+# fi
 
 # build image and push to docker hub
 docker build -t canvas . --no-cache &&
