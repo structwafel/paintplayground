@@ -109,3 +109,72 @@ impl ChunkLoaderSaver for SimpleInMemoryLoader {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod testing {
+
+    use super::*;
+    // Initialize tracing subscriber
+
+    fn init_tracing() {
+        let _ = tracing_subscriber::fmt::try_init();
+    }
+
+    #[test]
+    fn chunk_color_packed_values() {
+        let mut chunk_color = ChunkColor::default();
+
+        // check that it is 00000000
+        assert_eq!(chunk_color.0, 0b00000000);
+
+        chunk_color.set_left(Color::Ten);
+
+        assert_eq!(chunk_color.left(), Color::Ten.u8());
+        // right should be untouched
+        assert_eq!(chunk_color.right(), Color::Zero.u8());
+
+        chunk_color.set_right(Color::Twelve);
+        assert_eq!(chunk_color.right(), Color::Twelve.u8());
+        // left should be untouchedm
+        assert_eq!(chunk_color.left(), Color::Ten.u8());
+    }
+
+    // test if loading and saving the chunk gives you the same chunk
+    #[test]
+    fn chunk_loading_saving() {
+        let mut chunk = Chunk::default();
+        let coordinates = ChunkCoordinates::new(0, 0).unwrap();
+
+        // edit some values in the chunk
+        chunk[0].set_left(Color::Ten);
+        chunk[CHUNK_BYTE_SIZE - 1].set_right(Color::Eight);
+        chunk[CHUNK_BYTE_SIZE / 2].set_left(Color::One);
+
+        let saver = SimpleToFileSaver::new();
+        saver.save_chunk(chunk.clone(), coordinates);
+
+        let loaded_chunk = saver.load_chunk(coordinates, true).unwrap();
+
+        chunk.iter().zip(loaded_chunk.iter()).for_each(|(a, b)| {
+            assert_eq!((a.left(), a.right()), (b.left(), b.right()),);
+            // assert_eq!(a.right(), b.right(), "right numbers");
+        });
+    }
+
+    // test to vec etc for chunk
+    #[test]
+    fn chunk_to_vec() {
+        init_tracing();
+        let mut chunk = SmallChunkArray::default();
+        chunk[0].set_left(Color::Ten);
+        chunk[1].set_right(Color::Eight);
+        chunk[4].set_left(Color::One);
+
+        let vec = chunk.clone().to_u8vec();
+        let chunk2 = SmallChunkArray::from(vec);
+
+        chunk.iter().zip(chunk2.iter()).for_each(|(a, b)| {
+            assert_eq!((a.left(), a.right()), (b.left(), b.right()),);
+        });
+    }
+}
