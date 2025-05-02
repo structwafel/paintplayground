@@ -88,7 +88,7 @@ impl Color {
         })
     }
 
-    fn u8(self) -> u8 {
+    pub fn u8(self) -> u8 {
         self as u8
     }
 
@@ -194,8 +194,8 @@ type ChunkArray<const N: usize> = [ChunkColor; N];
 // type ChunkArray = [ChunkColor; CHUNK_SIZE / 2];
 
 pub type Chunk = InnerChunk<{ CHUNK_SIZE / 2 }>;
-#[cfg(test)]
-type SmallChunkArray = InnerChunk<5>;
+
+pub type SmallChunkArray = InnerChunk<5>;
 
 impl Chunk {
     pub fn row_of_colors(&self, x: usize) -> Vec<Color> {

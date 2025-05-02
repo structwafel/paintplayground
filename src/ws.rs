@@ -11,8 +11,10 @@ use futures::{
 };
 use tracing::{debug, info};
 
-use crate::{board_manager, types::*};
+use crate::board_manager;
 use crate::{chunk_manager, AppState};
+
+use paintplayground::types::*;
 
 #[axum::debug_handler]
 pub async fn ws_handler(

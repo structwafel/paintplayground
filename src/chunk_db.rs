@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::types::*;
+use paintplayground::types::*;
 
 // todo, these should probably return errors
 pub trait ChunkLoaderSaver: Send + Sync + Debug {
@@ -114,6 +114,8 @@ impl ChunkLoaderSaver for SimpleInMemoryLoader {
 mod testing {
 
     use super::*;
+    use paintplayground::types::SmallChunkArray;
+
     // Initialize tracing subscriber
 
     fn init_tracing() {
@@ -123,9 +125,8 @@ mod testing {
     #[test]
     fn chunk_color_packed_values() {
         let mut chunk_color = ChunkColor::default();
-
-        // check that it is 00000000
-        assert_eq!(chunk_color.0, 0b00000000);
+        assert_eq!(chunk_color.left(), Color::Zero.u8());
+        assert_eq!(chunk_color.right(), Color::Zero.u8());
 
         chunk_color.set_left(Color::Ten);
 

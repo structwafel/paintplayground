@@ -6,8 +6,8 @@ use std::sync::{
 use crate::{
     chunk_db::ChunkLoaderSaver,
     chunk_manager::{ChunkManager, ChunkUpdate, HandlerData},
-    types::*,
 };
+use paintplayground::types::*;
 
 pub enum Error {
     TooManyChunksLoaded,

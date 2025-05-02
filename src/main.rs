@@ -27,10 +27,9 @@ mod router;
 mod screenshot;
 #[cfg(test)]
 mod tests;
-mod types;
 mod ws;
 
-use types::*;
+use paintplayground::types::*;
 
 const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 500;
 
