@@ -12,9 +12,9 @@ use tower_http::{
     trace::{DefaultMakeSpan, TraceLayer},
 };
 
-use crate::types::*;
 use crate::AppState;
 use crate::{board_manager::ChunkRequest, screenshot};
+use paintplayground::types::*;
 
 pub fn all_routes(state: AppState) -> Router {
     let compression_layer = CompressionLayer::new().gzip(true);

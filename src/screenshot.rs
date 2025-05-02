@@ -3,7 +3,7 @@ use crate::{
     Chunk, ChunkCoordinates,
 };
 
-use crate::types::*;
+use paintplayground::types::*;
 
 pub struct Screenshot {
     chunks: Vec<Vec<Option<Chunk>>>,

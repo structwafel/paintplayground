@@ -1,4 +1,31 @@
-use std::{borrow::Cow, ops::ControlFlow, time::Duration};
+#[tokio::main]
+async fn main() {
+    let env_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::new(env_filter)
+                .add_directive("hyper=error".parse().unwrap())
+                .add_directive("tokio=error".parse().unwrap()),
+        )
+        .with_target(false)
+        .init();
+
+    let args: Vec<String> = std::env::args().collect();
+    let quantity = if args.len() == 2 {
+        args[1].parse::<usize>().unwrap()
+    } else if args.len() > 2 {
+        error!("what, too many things given {:?}", args);
+        return;
+    } else {
+        // default
+        1000
+    };
+
+    // Call the client function with args
+    spawn_clients(quantity).await
+}
+
+use std::{borrow::Cow, ops::ControlFlow};
 
 use futures::{SinkExt, StreamExt};
 
@@ -8,7 +35,7 @@ use tungstenite::{
     Message,
 };
 
-use crate::types::*;
+use paintplayground::types::*;
 
 const SERVER: &str = "ws://localhost:3001/ws/0/0";
 const TIMEOUT: u64 = 10;
@@ -26,7 +53,7 @@ pub async fn spawn_clients(n: usize) {
 //creates a client. quietly exits on failure.
 async fn spawn_client(who: usize) {
     let ws_stream = match connect_async(SERVER).await {
-        Ok((stream, response)) => {
+        Ok((stream, _response)) => {
             // println!("Handshake for client {who} has been completed");
             // This will be the HTTP response, same as with server this is the last moment we
             // can still access HTTP stuff.
@@ -40,24 +67,6 @@ async fn spawn_client(who: usize) {
     };
 
     let (mut sender, mut receiver) = ws_stream.split();
-
-    //     // request the entire board,
-    // let response = reqwest::get("http://localhost:3001/board").await.unwrap();
-    // let board = response.bytes().await.unwrap();
-
-    // // check if the frist 5 entries in the byte array are 0.
-    // for entry in board.to_vec().iter().take(10) {
-    //     if entry == &0x20 {
-    //         println!("entry is 20")
-    //     }
-    // }
-    // drop(board);
-
-    // //we can ping the server for start
-    // sender
-    //     .send(Message::Ping("Hello, Server!".into()))
-    //     .await
-    //     .expect("Can not send!");
 
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
@@ -132,10 +141,10 @@ async fn spawn_client(who: usize) {
 
 fn process_message(msg: Message, who: usize) -> ControlFlow<(), ()> {
     match msg {
-        Message::Text(t) => {
+        Message::Text(_t) => {
             // println!(">>> {who} got str: {t:?}");
         }
-        Message::Binary(d) => {
+        Message::Binary(_d) => {
             // println!(">>> {} got {} bytes: {:?}", who, d.len(), d);
         }
         Message::Close(c) => {
@@ -150,12 +159,9 @@ fn process_message(msg: Message, who: usize) -> ControlFlow<(), ()> {
             return ControlFlow::Break(());
         }
 
-        Message::Pong(v) => {
+        Message::Pong(_v) => {
             // println!(">>> {who} got pong with {v:?}");
         }
-        // Just as with axum server, the underlying tungstenite websocket library
-        // will handle Ping for you automagically by replying with Pong and copying the
-        // v according to spec. But if you need the contents of the pings you can see them here.
         Message::Ping(v) => {
             println!(">>> {who} got ping with {v:?}");
         }

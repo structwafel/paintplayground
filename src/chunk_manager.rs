@@ -2,7 +2,8 @@ use std::{error::Error, time::Duration};
 
 use tracing::error;
 
-use crate::{chunk_db::ChunkLoaderSaver, types::*};
+use crate::chunk_db::ChunkLoaderSaver;
+use paintplayground::types::*;
 
 pub enum ChunkUpdate {
     /// The chunk manager doesn't have any clients, and can be removed

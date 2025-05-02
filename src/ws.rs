@@ -11,8 +11,10 @@ use futures::{
 };
 use tracing::{debug, info};
 
-use crate::{board_manager, types::*};
+use crate::board_manager;
 use crate::{chunk_manager, AppState};
+
+use paintplayground::types::*;
 
 #[axum::debug_handler]
 pub async fn ws_handler(
@@ -166,12 +168,22 @@ impl WebSocketHandler {
                         debug!("received broadcast");
                         let message = WsMessage::chunk_update_buffer(packed_cells);
 
-                        sender.send(Message::Binary(message)).await.unwrap();
+                        match sender.send(Message::Binary(message)).await {
+                            Ok(_) => (), // message got send fine,
+                            Err(err) => {
+                                // something broke the pipe, most likely the connection was closed in between await operations
+                                error!("sender could not send");
+                                break;
+                            }
+                        };
                     }
                     Err(e) => {
                         debug!("error receiving message: {:?}", e);
                         // The ChunkManager has been dropped, close the connection
-                        sender.send(Message::Close(None)).await.unwrap();
+                        sender
+                            .send(Message::Close(None))
+                            .await
+                            .map_err(|err| error!("could not send close message {}", err));
 
                         break;
                     }
