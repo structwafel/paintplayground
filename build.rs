@@ -8,8 +8,6 @@ fn main() {
     println!("cargo:rerun-if-changed=public/js/");
 
     bundle_js_files("js", "js/bundled.js").unwrap();
-
-    update_html_script_tag().unwrap();
 }
 
 fn bundle_js_files(js_dir: &str, output_file: &str) -> std::io::Result<()> {
@@ -74,22 +72,4 @@ fn collect_js_files(dir: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<Vec
     }
 
     Ok(files.to_vec())
-}
-
-fn update_html_script_tag() -> std::io::Result<()> {
-    let html_path = "public/index.html";
-    let html_content = fs::read_to_string(html_path)?;
-
-    // Only update if the bundle script tag doesn't already exist
-    if !html_content.contains("src=\"./js/bundled.js\"") {
-        let updated_content = html_content.replace(
-            "<script type=\"module\" src=\"./js/stuff.js\"></script>",
-            "<script type=\"module\" src=\"./js/bundled.js\"></script>",
-        );
-
-        fs::write(html_path, updated_content)?;
-        println!("cargo:warning=Updated HTML to use bundled JavaScript");
-    }
-
-    Ok(())
 }
