@@ -26,10 +26,7 @@ mod screenshot;
 mod tests;
 mod ws;
 
-use paintplayground::{
-    chunk_db::CFR2ChunkSaver,
-    types::*,
-};
+use paintplayground::{chunk_db::CFR2ChunkSaver, types::*};
 
 const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 500;
 
@@ -85,7 +82,7 @@ impl AppState {
 #[tokio::main]
 async fn main() {
     // console_subscriber::init();
-    dotenvy::dotenv().unwrap();
+    let _ = dotenvy::dotenv();
 
     let args: Vec<String> = env::args().collect();
 

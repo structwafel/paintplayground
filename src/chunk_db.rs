@@ -140,10 +140,11 @@ impl CFR2ChunkSaver {
     }
 
     pub fn new_from_env() -> Self {
-        let access_key_id = std::env::var("S3ACCESSKEY").unwrap();
-        let secret_access_key = std::env::var("S3SECRETACCESSKEY").unwrap();
-        let account_id = std::env::var("S3ACCOUNTID").unwrap();
-        let bucket = std::env::var("S3BUCKETNAME").unwrap();
+        let access_key_id = std::env::var("S3ACCESSKEY").expect("S3ACCESSKEY not set");
+        let secret_access_key =
+            std::env::var("S3SECRETACCESSKEY").expect("S3SECRETACCESSKEY not set");
+        let account_id = std::env::var("S3ACCOUNTID").expect("S3ACCOUNTID not set");
+        let bucket = std::env::var("S3BUCKETNAME").expect("S3BUCKETNAME not set");
 
         CFR2ChunkSaver::new(&access_key_id, &secret_access_key, &account_id, &bucket)
     }

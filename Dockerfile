@@ -2,6 +2,12 @@ FROM rust:1.86-slim-bookworm as builder
 
 WORKDIR /app
 
+# openssl stuff
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY ./src ./src
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
