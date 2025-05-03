@@ -201,8 +201,6 @@ impl ChunkLoaderSaver for CFR2ChunkSaver {
 #[cfg(test)]
 mod testing {
 
-    
-
     use crate::chunk_db;
 
     use super::*;
@@ -244,7 +242,7 @@ mod testing {
         chunk[CHUNK_BYTE_SIZE / 2].set_left(Color::One);
 
         let saver = SimpleToFileSaver::new();
-        chunk_db::ChunkLoaderSaver::save_chunk(&saver, chunk.clone(), coordinates).await;
+        let _ = chunk_db::ChunkLoaderSaver::save_chunk(&saver, chunk.clone(), coordinates).await;
         // saver.save_chunk(chunk.clone(), coordinates).await;
 
         let loaded_chunk = chunk_db::ChunkLoaderSaver::load_chunk(&saver, coordinates, true)
@@ -293,7 +291,7 @@ mod testing {
         let mut new_chunk = Chunk::new();
         new_chunk[0].set_left(Color::One);
 
-        chunk_db::ChunkLoaderSaver::save_chunk(
+        let _ = chunk_db::ChunkLoaderSaver::save_chunk(
             &loader,
             new_chunk.clone(),
             ChunkCoordinates::new(10, 0).unwrap(),
