@@ -13,7 +13,10 @@ impl Screenshot {
     /// create screenshot from two corner [`ChunkCoordinates`]
     ///
     /// todo use [`AppState`] to get the chunks, instead of filesaver
-    pub fn from_coordinates(top_left: ChunkCoordinates, bottom_right: ChunkCoordinates) -> Self {
+    pub async fn from_coordinates(
+        top_left: ChunkCoordinates,
+        bottom_right: ChunkCoordinates,
+    ) -> Self {
         let loader = SimpleToFileSaver::new();
 
         let min_x = top_left.x().min(bottom_right.x());
@@ -30,7 +33,7 @@ impl Screenshot {
             let mut row = Vec::with_capacity(width);
             for x in min_x..=max_x {
                 let coordinate = ChunkCoordinates::new(x, y).unwrap();
-                if let Ok(chunk) = loader.load_chunk(coordinate, false) {
+                if let Ok(chunk) = loader.load_chunk(coordinate, false).await {
                     row.push(Some(chunk));
                 } else {
                     row.push(None);

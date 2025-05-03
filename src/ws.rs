@@ -118,7 +118,7 @@ impl WebSocketHandler {
                 let msg = match msg {
                     Ok(msg) => msg,
                     Err(e) => {
-                        info!("error receiving message: {:?}", e);
+                        debug!("error receiving message: {:?}", e);
                         continue;
                     }
                 };

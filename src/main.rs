@@ -98,6 +98,7 @@ async fn main() {
                 ChunkCoordinates::new(-chunks_in_direction, chunks_in_direction).unwrap(),
                 ChunkCoordinates::new(chunks_in_direction, -chunks_in_direction).unwrap(),
             )
+            .await
             .save(8, "screenshot.png");
             return;
         }

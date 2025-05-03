@@ -219,6 +219,7 @@ where
         match request_type {
             ChunkRequest::Storage => chunks_loader_saver
                 .load_chunk(coordinates, true)
+                .await
                 .map_err(|err| {
                     error!("loading error setting default: {:?}", err);
                 })
@@ -233,6 +234,7 @@ where
                     // get from storage
                     let chunk = chunks_loader_saver
                         .load_chunk(coordinates, true)
+                        .await
                         .map_err(|err| {
                             error!("loading error setting default: {:?}", err);
                         })

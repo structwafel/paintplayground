@@ -5,10 +5,10 @@ use std::{
 
 use paintplayground::types::*;
 
-// todo, these should probably return errors
-pub trait ChunkLoaderSaver: Send + Sync + Debug {
-    fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
-    fn load_chunk(
+#[trait_variant::make(ChunkLoaderSaver: Send)]
+pub trait LocalChunkLoaderSaver: Send + Sync + Debug {
+    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
+    async fn load_chunk(
         &self,
         coordinates: ChunkCoordinates,
         create_new: bool,
@@ -40,7 +40,7 @@ impl SimpleToFileSaver {
 // todo use compression for smaller saved files
 /// Saves in canvas dir
 impl ChunkLoaderSaver for SimpleToFileSaver {
-    fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
+    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
         // save the chunk to the file system
         debug!("Saving chunk at {:?}", coordinates);
         let mut file = File::create(self.file_path(coordinates)).unwrap();
@@ -49,7 +49,7 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         file.write_all(&chunk.to_u8vec()).unwrap();
     }
 
-    fn load_chunk(
+    async fn load_chunk(
         &self,
         coordinates: ChunkCoordinates,
         create_new: bool,
@@ -96,8 +96,27 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct S3ChunkSaver {}
+
+impl ChunkLoaderSaver for S3ChunkSaver {
+    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
+        todo!()
+    }
+
+    async fn load_chunk(
+        &self,
+        coordinates: ChunkCoordinates,
+        create_new: bool,
+    ) -> Result<Chunk, ChunkLoaderSaverError> {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod testing {
+
+    use crate::chunk_db;
 
     use super::*;
     use paintplayground::types::SmallChunkArray;
@@ -127,8 +146,8 @@ mod testing {
     }
 
     // test if loading and saving the chunk gives you the same chunk
-    #[test]
-    fn chunk_loading_saving() {
+    #[tokio::test]
+    async fn chunk_loading_saving() {
         let mut chunk = Chunk::default();
         let coordinates = ChunkCoordinates::new(0, 0).unwrap();
 
@@ -138,9 +157,12 @@ mod testing {
         chunk[CHUNK_BYTE_SIZE / 2].set_left(Color::One);
 
         let saver = SimpleToFileSaver::new();
-        saver.save_chunk(chunk.clone(), coordinates);
+        chunk_db::ChunkLoaderSaver::save_chunk(&saver, chunk.clone(), coordinates).await;
+        // saver.save_chunk(chunk.clone(), coordinates).await;
 
-        let loaded_chunk = saver.load_chunk(coordinates, true).unwrap();
+        let loaded_chunk = chunk_db::ChunkLoaderSaver::load_chunk(&saver, coordinates, true)
+            .await
+            .unwrap();
 
         chunk.iter().zip(loaded_chunk.iter()).for_each(|(a, b)| {
             assert_eq!((a.left(), a.right()), (b.left(), b.right()),);

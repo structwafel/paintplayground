@@ -67,27 +67,30 @@ where
             ping_chunk_requester_tx,
         };
 
-        let chunk = chunk_saver
-            .load_chunk(coordinates, true)
-            .map_err(|err| {
-                error!("loading error setting default: {:?}", err);
-            })
-            .unwrap_or_default();
-
-        let chunk_manager = Self {
-            chunk_saver,
-            chunk,
-            coordinates,
-            broadcaster_tx,
-            update_rx,
-            chunk_requester_rx,
-            ping_chunk_requester_rx,
-            chunk_m_updates_tx,
-            last_change: std::time::Instant::now(),
-        };
-
         debug!("Starting chunk manager for {:?}", coordinates);
-        tokio::spawn(async move { chunk_manager.run().await });
+        tokio::spawn(async move {
+            let chunk = chunk_saver
+                .load_chunk(coordinates, true)
+                .await
+                .map_err(|err| {
+                    error!("loading error setting default: {:?}", err);
+                })
+                .unwrap_or_default();
+
+            let chunk_manager = Self {
+                chunk_saver,
+                chunk,
+                coordinates,
+                broadcaster_tx,
+                update_rx,
+                chunk_requester_rx,
+                ping_chunk_requester_rx,
+                chunk_m_updates_tx,
+                last_change: std::time::Instant::now(),
+            };
+
+            chunk_manager.run().await;
+        });
 
         handler_data
     }
