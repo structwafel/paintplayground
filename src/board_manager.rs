@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicI64, AtomicU64},
     Arc,
+    atomic::{AtomicI64, AtomicU64},
 };
 
 use crate::{
@@ -9,8 +9,12 @@ use crate::{
 };
 use paintplayground::types::*;
 
-pub enum Error {
+#[derive(thiserror::Error, Debug)]
+pub enum BoardManagerError {
+    #[error("too many chunks loaded")]
     TooManyChunksLoaded,
+    #[error("failed to load chunk/chunks")]
+    LoadingChunks,
 }
 
 #[derive(Debug)]
@@ -25,9 +29,14 @@ pub enum BoardManagerMessage {
         ChunkRequest,
         oneshot::Sender<Option<Chunk>>,
     ),
+    GetScreenshotChunks(
+        ChunkCoordinates, // top_left
+        ChunkCoordinates, // bottom_right
+        oneshot::Sender<Result<Vec<Vec<Option<Chunk>>>, BoardManagerError>>,
+    ),
     GetHandler(
         ChunkCoordinates,
-        oneshot::Sender<Result<HandlerData, Error>>,
+        oneshot::Sender<Result<HandlerData, BoardManagerError>>,
     ),
 }
 #[derive(Debug, Clone)]
@@ -53,7 +62,10 @@ impl BoardManagerCommunicator {
         receiver.await.unwrap()
     }
 
-    pub async fn get_handler(&self, coordinates: ChunkCoordinates) -> Result<HandlerData, Error> {
+    pub async fn get_handler(
+        &self,
+        coordinates: ChunkCoordinates,
+    ) -> Result<HandlerData, BoardManagerError> {
         debug!("BMC- get_handler");
         let (sender, receiver) = oneshot::channel();
         self.board_manager_tx
@@ -61,6 +73,26 @@ impl BoardManagerCommunicator {
             .await
             .unwrap();
         receiver.await.unwrap()
+    }
+
+    pub async fn get_screenshot_chunks(
+        &self,
+        top_left: ChunkCoordinates,
+        bottom_right: ChunkCoordinates,
+    ) -> Result<Vec<Vec<Option<Chunk>>>, BoardManagerError> {
+        let (sender, receiver) = oneshot::channel();
+
+        self.board_manager_tx
+            .send(BoardManagerMessage::GetScreenshotChunks(
+                top_left,
+                bottom_right,
+                sender,
+            ))
+            .await
+            .unwrap();
+
+        let matrix_chunks = receiver.await.unwrap();
+        matrix_chunks
     }
 }
 
@@ -84,7 +116,7 @@ where
     chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
 
     /// The board manager receives messages from BoardManagerCommunicator
-    board_manager_rx: tokio::sync::mpsc::Receiver<BoardManagerMessage>,
+    board_manager_rx: mpsc::Receiver<BoardManagerMessage>,
 }
 
 impl<T> BoardManager<T>
@@ -92,7 +124,7 @@ where
     T: ChunkLoaderSaver + 'static,
 {
     pub fn start(chunks_loader_saver: T) -> BoardManagerCommunicator {
-        let (board_manager_tx, board_manager_rx) = tokio::sync::mpsc::channel(100);
+        let (board_manager_tx, board_manager_rx) = mpsc::channel(100);
         let (chunk_updates_tx, chunk_updates_rx) = mpsc::channel(100);
 
         let board_manager = Self {
@@ -123,9 +155,28 @@ where
                 // The BoardManagerCommunicator wants to talk to you
                 message=self.board_manager_rx.recv()=>{
                     match message {
+                        Some(BoardManagerMessage::GetScreenshotChunks(top_left, bottom_right, sender))=>{
+                            debug!("BM - GetScreenshotChunks request from {:?} to {:?}", top_left, bottom_right);
+
+                            let chunks_map = self.chunks.clone();
+                            let chunks_loader_saver = self.chunks_loader_saver.clone();
+
+                            tokio::spawn(async move {
+                                let chunks = Self::get_screenshot_chunks(
+                                    &chunks_map,
+                                    &chunks_loader_saver,
+                                    top_left,
+                                    bottom_right
+                                ).await;
+
+                                let _ = sender.send(Ok(chunks));
+                            });
+
+
+                        }
                         Some(BoardManagerMessage::GetChunk(coordinates, request_type, sender)) => {
                             debug!("BM - GetChunk request {:?}:{:?}", coordinates, request_type);
-                            let chunk = self.read_chunk(coordinates, request_type).await;
+                            let chunk = Self::read_chunk(&self.chunks,&self.chunks_loader_saver, coordinates, request_type).await;
                             let _ = sender.send(chunk);
                         }
                         Some(BoardManagerMessage::GetHandler(coordinates, sender)) => {
@@ -157,17 +208,16 @@ where
 
             }
         }
-        debug!("BM - Stopping");
     }
 
     pub async fn read_chunk(
-        &self,
+        chunks: &dashmap::DashMap<ChunkCoordinates, HandlerData>,
+        chunks_loader_saver: &T,
         coordinates: ChunkCoordinates,
         request_type: ChunkRequest,
     ) -> Option<Chunk> {
         match request_type {
-            ChunkRequest::Storage => self
-                .chunks_loader_saver
+            ChunkRequest::Storage => chunks_loader_saver
                 .load_chunk(coordinates, true)
                 .map_err(|err| {
                     error!("loading error setting default: {:?}", err);
@@ -175,17 +225,13 @@ where
                 .ok(),
 
             ChunkRequest::Live => {
-                let handler = self
-                    .chunks
-                    .get(&coordinates)
-                    .map(|entry| entry.value().clone());
+                let handler = chunks.get(&coordinates);
 
                 if let Some(handler) = handler {
                     return Some(handler.fetch_chunk().await);
                 } else {
                     // get from storage
-                    let chunk = self
-                        .chunks_loader_saver
+                    let chunk = chunks_loader_saver
                         .load_chunk(coordinates, true)
                         .map_err(|err| {
                             error!("loading error setting default: {:?}", err);
@@ -199,7 +245,10 @@ where
     }
 
     // get the data neccesary for a handler to start
-    pub fn get_chunk_handler(&self, coordinates: ChunkCoordinates) -> Result<HandlerData, Error> {
+    pub fn get_chunk_handler(
+        &self,
+        coordinates: ChunkCoordinates,
+    ) -> Result<HandlerData, BoardManagerError> {
         let handler = self
             .chunks
             .entry(coordinates)
@@ -218,7 +267,7 @@ where
                 } else {
                     debug!("Too many chunks loaded");
                     // return Error::TooManyChunksLoaded;
-                    Err(Error::TooManyChunksLoaded)
+                    Err(BoardManagerError::TooManyChunksLoaded)
                 }
             })
             .map(|handler| handler.value().clone())?;
@@ -230,12 +279,59 @@ where
         self.chunks_loaded.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    async fn screenshot(&self) {
-        // let mut screenshot = Screenshot::new();
-        // for (coords, handler) in self.chunks.iter() {
-        //     let chunk = handler.fetch_chunk().await;
-        //     screenshot.add_chunk(coords, chunk);
-        // }
-        // screenshot.save();
+    pub async fn get_screenshot_chunks(
+        chunks: &dashmap::DashMap<ChunkCoordinates, HandlerData>,
+        chunks_loader_saver: &T,
+        top_left: ChunkCoordinates,
+        bottom_right: ChunkCoordinates,
+    ) -> Vec<Vec<Option<Chunk>>> {
+        let min_x = top_left.x().min(bottom_right.x());
+        let max_x = top_left.x().max(bottom_right.x());
+        let min_y = bottom_right.y().min(top_left.y());
+        let max_y = bottom_right.y().max(top_left.y());
+
+        let width = (max_x - min_x + 1) as usize;
+        let height = (max_y - min_y + 1) as usize;
+
+        let mut chunks_grid = Vec::with_capacity(height);
+
+        // Collect all coordinates that need to be fetched
+        let mut coordinates = Vec::with_capacity(width * height);
+
+        for y in (min_y..=max_y).rev() {
+            for x in min_x..=max_x {
+                if let Ok(coordinate) = ChunkCoordinates::new(x, y) {
+                    coordinates.push(coordinate);
+                }
+            }
+        }
+
+        // Fetch all chunks in parallel (using existing read_chunk function)
+        let mut fetched_chunks = futures::future::join_all(coordinates.iter().map(|&coordinate| {
+            Self::read_chunk(chunks, chunks_loader_saver, coordinate, ChunkRequest::Live)
+        }))
+        .await;
+
+        // Organize the chunks into the grid
+        for y in (min_y..=max_y).rev() {
+            let mut row = Vec::with_capacity(width);
+            for x in min_x..=max_x {
+                if let Ok(coordinate) = ChunkCoordinates::new(x, y) {
+                    // Find this coordinate in our fetched results
+                    let position = coordinates.iter().position(|&c| c == coordinate);
+                    if let Some(pos) = position {
+                        row.push(fetched_chunks.remove(pos));
+                        coordinates.remove(pos);
+                    } else {
+                        row.push(None);
+                    }
+                } else {
+                    row.push(None);
+                }
+            }
+            chunks_grid.push(row);
+        }
+
+        chunks_grid
     }
 }

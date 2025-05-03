@@ -1,8 +1,9 @@
 #![allow(unused)]
+
 use std::{
     env,
     net::SocketAddr,
-    sync::{atomic::AtomicUsize, LazyLock},
+    sync::{LazyLock, atomic::AtomicUsize},
 };
 
 use chunk_db::{ChunkLoaderSaver, SimpleToFileSaver};
@@ -89,9 +90,11 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
 
     if let Some(first_arg) = args.get(1) {
+        debug!("plotting");
         if first_arg == "plot" {
             let chunks_in_direction = *CHUNKS_IN_DIRECTION;
-            screenshot::Screenshot::from_coordinates(
+
+            let _ = screenshot::Screenshot::from_coordinates(
                 ChunkCoordinates::new(-chunks_in_direction, chunks_in_direction).unwrap(),
                 ChunkCoordinates::new(chunks_in_direction, -chunks_in_direction).unwrap(),
             )

@@ -18,7 +18,7 @@ pub trait ChunkLoaderSaver: Send + Sync + Debug {
 #[derive(Debug)]
 pub enum ChunkLoaderSaverError {
     ChunkLoadError(String),
-    ChunkSaveError,
+    ChunkSaveError(()),
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +85,7 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
                 return Err(ChunkLoaderSaverError::ChunkLoadError(format!(
                     "Error loading chunk at {:?}: {:?}",
                     coordinates, err
-                )))
+                )));
             }
         };
 
@@ -93,20 +93,6 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
             Some(data) => data.into(),
             None => Chunk::new(),
         })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SimpleInMemoryLoader {}
-impl ChunkLoaderSaver for SimpleInMemoryLoader {
-    fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {}
-
-    fn load_chunk(
-        &self,
-        coordinates: ChunkCoordinates,
-        create_new: bool,
-    ) -> Result<Chunk, ChunkLoaderSaverError> {
-        todo!()
     }
 }
 

@@ -113,6 +113,44 @@ impl Color {
             Color::Fifteen => (235, 108, 152),
         }
     }
+
+    pub fn all_colors_rgb() -> [(u8, u8, u8); 16] {
+        [
+            (224, 211, 200),
+            (245, 238, 176),
+            (250, 191, 97),
+            (224, 141, 81),
+            (138, 88, 101),
+            (69, 43, 63),
+            (44, 94, 59),
+            (96, 156, 79),
+            (198, 204, 84),
+            (120, 194, 214),
+            (84, 121, 176),
+            (86, 84, 110),
+            (131, 158, 166),
+            (240, 91, 91),
+            (143, 50, 95),
+            (235, 108, 152),
+        ]
+    }
+
+    pub fn to_index(&self) -> u8 {
+        let (r, g, b) = self.to_rgb();
+        Self::rgb_to_index(r, g, b)
+    }
+
+    // we use all colours to get the correct index for the mapped colours
+    pub fn rgb_to_index(r: u8, g: u8, b: u8) -> u8 {
+        let colors = Color::all_colors_rgb();
+        for (idx, &(cr, cg, cb)) in colors.iter().enumerate() {
+            if r == cr && g == cg && b == cb {
+                return idx as u8;
+            }
+        }
+        // Default to first color if no match (shouldn't happen)
+        0
+    }
 }
 
 impl TryFrom<u8> for Color {

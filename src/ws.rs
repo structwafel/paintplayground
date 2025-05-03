@@ -1,7 +1,7 @@
 use axum::{
     extract::{
-        ws::{Message, WebSocket},
         Path, State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
     },
     response::IntoResponse,
 };
@@ -12,7 +12,7 @@ use futures::{
 use tracing::{debug, info};
 
 use crate::board_manager;
-use crate::{chunk_manager, AppState};
+use crate::{AppState, chunk_manager};
 
 use paintplayground::types::*;
 
@@ -53,9 +53,13 @@ impl WebSocketHandler {
         debug!("WH - getting handler data");
         let handler_data = match state.board_communicator.get_handler(coordinates).await {
             Err(err) => match err {
-                // if there are too many chunks loaded, tell the client
-                board_manager::Error::TooManyChunksLoaded => {
+                board_manager::BoardManagerError::TooManyChunksLoaded => {
                     let message = WsMessage::too_many_chunks_buffer();
+                    socket.send(Message::Binary(message)).await.unwrap();
+                    return Err(socket);
+                }
+                board_manager::BoardManagerError::LoadingChunks => {
+                    let message = WsMessage::chunk_not_found_buffer();
                     socket.send(Message::Binary(message)).await.unwrap();
                     return Err(socket);
                 }
@@ -172,7 +176,7 @@ impl WebSocketHandler {
                             Ok(_) => (), // message got send fine,
                             Err(err) => {
                                 // something broke the pipe, most likely the connection was closed in between await operations
-                                error!("sender could not send");
+                                error!("sender could not send {}", err);
                                 break;
                             }
                         };
@@ -180,7 +184,7 @@ impl WebSocketHandler {
                     Err(e) => {
                         debug!("error receiving message: {:?}", e);
                         // The ChunkManager has been dropped, close the connection
-                        sender
+                        let _ = sender
                             .send(Message::Close(None))
                             .await
                             .map_err(|err| error!("could not send close message {}", err));

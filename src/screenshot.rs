@@ -1,6 +1,6 @@
 use crate::{
-    chunk_db::{ChunkLoaderSaver, SimpleToFileSaver},
     Chunk, ChunkCoordinates,
+    chunk_db::{ChunkLoaderSaver, SimpleToFileSaver},
 };
 
 use paintplayground::types::*;
@@ -83,7 +83,6 @@ impl Screenshot {
                                 let (r, g, b) = color.to_rgb();
 
                                 // scaling, how fun....
-                                // ? perhaps we don't want this?
                                 for dy in 0..scale {
                                     let y_offset = base_y + dy;
                                     for dx in 0..scale {
@@ -103,15 +102,91 @@ impl Screenshot {
         (buffer, img_width, img_height)
     }
 
+    // you can index the buffer with colour data for smaller files
+    // as we only have 16 colours, this is great
+    pub fn generate_indexed_buffer_4bit(&self, quality: u8) -> (Vec<u8>, u32, u32) {
+        let x_chunks = self.chunks[0].len();
+        let y_chunks = self.chunks.len();
+
+        let scale = quality.max(1) as usize;
+        let chunk_scaled = CHUNK_LENGTH * scale;
+        let img_width = (x_chunks * chunk_scaled) as u32;
+        let img_height = (y_chunks * chunk_scaled) as u32;
+
+        let buffer_size = ((img_width as usize * img_height as usize) + 1) / 2;
+        let mut buffer = vec![0u8; buffer_size];
+
+        self.chunks
+            .iter()
+            .enumerate()
+            .for_each(|(chunk_y, chunk_row)| {
+                for row_in_chunk in 0..CHUNK_LENGTH {
+                    let base_y = (chunk_y * CHUNK_LENGTH + row_in_chunk) * scale;
+
+                    chunk_row
+                        .iter()
+                        .enumerate()
+                        .for_each(|(chunk_x, maybe_chunk)| {
+                            let row_colors = match maybe_chunk {
+                                Some(chunk) => chunk.row_of_colors(row_in_chunk),
+                                None => vec![Color::Zero; CHUNK_LENGTH],
+                            };
+
+                            let base_x = chunk_x * chunk_scaled;
+
+                            for (x, color) in row_colors.iter().enumerate() {
+                                let color_index = color.to_index();
+
+                                // scaling
+                                for dy in 0..scale {
+                                    let y_offset = base_y + dy;
+                                    for dx in 0..scale {
+                                        let x_offset = base_x + x * scale + dx;
+                                        let pixel_pos = y_offset * img_width as usize + x_offset;
+
+                                        // Calculate byte position and bit position within byte
+                                        let byte_pos = pixel_pos / 2;
+                                        let is_high_nibble = pixel_pos % 2 == 0;
+
+                                        // Update the right nibble of the byte
+                                        if is_high_nibble {
+                                            // High nibble (first 4 bits)
+                                            buffer[byte_pos] =
+                                                (buffer[byte_pos] & 0x0F) | (color_index << 4);
+                                        } else {
+                                            // Low nibble (last 4 bits)
+                                            buffer[byte_pos] =
+                                                (buffer[byte_pos] & 0xF0) | color_index;
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                }
+            });
+
+        (buffer, img_width, img_height)
+    }
+
     pub fn create_png(self, quality: u8) -> Vec<u8> {
-        let (buffer, width, height) = self.generate_buffer(quality);
+        let (indexed_buffer, width, height) = self.generate_indexed_buffer_4bit(quality);
         let mut png_buffer = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut png_buffer, width, height);
-            encoder.set_color(png::ColorType::Rgb);
-            encoder.set_depth(png::BitDepth::Eight);
+            encoder.set_color(png::ColorType::Indexed);
+            encoder.set_depth(png::BitDepth::Four);
+
+            encoder.set_filter(png::FilterType::NoFilter);
+            encoder.set_compression(png::Compression::Best);
+
+            let palette: Vec<u8> = Color::all_colors_rgb()
+                .iter()
+                .flat_map(|(r, g, b)| vec![*r, *g, *b])
+                .collect();
+            encoder.set_palette(&palette);
+
             let mut writer = encoder.write_header().unwrap();
-            writer.write_image_data(&buffer).unwrap();
+            writer.write_image_data(&indexed_buffer).unwrap();
         }
 
         png_buffer

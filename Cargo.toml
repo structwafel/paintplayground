@@ -48,6 +48,7 @@ mimalloc = "0.1.43"
 dashmap = "6.0.1"
 image = "0.25.5"
 png = "0.17.14"
+thiserror = "2.0.12"
 
 [dev-dependencies]
 reqwest = "0.12.5"

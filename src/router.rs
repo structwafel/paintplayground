@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     body::Body,
     extract::{Path, Query, State},
     response::IntoResponse,
-    routing::{get, Route},
-    Router,
+    routing::{Route, get},
 };
 use serde::Deserialize;
 use tower_http::{
@@ -60,7 +60,7 @@ async fn get_chunk(
     };
 
     // return the chunk in binary
-    return Ok(chunk.clone().into());
+    return Ok(chunk.into());
 }
 
 #[derive(Deserialize)]
@@ -96,7 +96,16 @@ async fn screenshot_handler(
         return Err(axum::http::StatusCode::NOT_FOUND);
     };
 
-    let screenshot = screenshot::Screenshot::from_coordinates(top_left, bottom_right);
+    let chunks = state
+        .board_communicator
+        .get_screenshot_chunks(top_left, bottom_right)
+        .await
+        .map_err(|err| {
+            error!("fetching screenshot chunks failed: {:?}", err);
+            &axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let screenshot = screenshot::Screenshot::from_chunks(chunks);
 
     let png_buffer = screenshot.create_png(q);
 

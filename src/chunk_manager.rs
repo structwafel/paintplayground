@@ -54,11 +54,11 @@ where
         chunk_saver: Arc<T>,
         chunk_m_updates_tx: mpsc::Sender<ChunkUpdate>,
     ) -> HandlerData {
-        let (update_tx, update_rx) = mpsc::channel(100);
-        let (broadcaster_tx, broadcast_rx) = broadcast::channel(10);
+        let (update_tx, update_rx) = mpsc::channel(1000);
+        let (broadcaster_tx, broadcast_rx) = broadcast::channel(1000);
 
-        let (chunk_requester_tx, chunk_requester_rx) = mpsc::channel(10);
-        let (ping_chunk_requester_tx, ping_chunk_requester_rx) = mpsc::channel(10);
+        let (chunk_requester_tx, chunk_requester_rx) = mpsc::channel(100);
+        let (ping_chunk_requester_tx, ping_chunk_requester_rx) = mpsc::channel(100);
 
         let handler_data = HandlerData {
             broadcast_rx,
@@ -92,20 +92,8 @@ where
         handler_data
     }
 
-    // pub fn handler_data(&self) -> HandlerData {
-    //     self.handler_data.clone()
-    // }
-
-    // pub fn coordinates(&self) -> ChunkCoordinates {
-    //     self.coordinates
-    // }
-
-    pub fn chunk(&self) -> &Chunk {
-        &self.chunk
-    }
-
     pub async fn run(mut self) {
-        // recieve updates, and buffer them
+        // receive updates, and buffer them
         let mut changed;
         loop {
             let mut smaller_buffer = Vec::new();
