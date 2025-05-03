@@ -55,12 +55,12 @@ impl WebSocketHandler {
             Err(err) => match err {
                 board_manager::BoardManagerError::TooManyChunksLoaded => {
                     let message = WsMessage::too_many_chunks_buffer();
-                    socket.send(Message::Binary(message)).await.unwrap();
+                    socket.send(Message::Binary(message.into())).await.unwrap();
                     return Err(socket);
                 }
                 board_manager::BoardManagerError::LoadingChunks => {
                     let message = WsMessage::chunk_not_found_buffer();
-                    socket.send(Message::Binary(message)).await.unwrap();
+                    socket.send(Message::Binary(message.into())).await.unwrap();
                     return Err(socket);
                 }
             },
@@ -78,7 +78,7 @@ impl WebSocketHandler {
         // send the chunk to the client
         debug!("sending chunk to client");
         let message = WsMessage::entire_chunk_buffer(chunk);
-        socket.send(Message::Binary(message)).await.unwrap();
+        socket.send(Message::Binary(message.into())).await.unwrap();
 
         let (sender, receiver) = socket.split();
 
@@ -172,7 +172,7 @@ impl WebSocketHandler {
                         debug!("received broadcast");
                         let message = WsMessage::chunk_update_buffer(packed_cells);
 
-                        match sender.send(Message::Binary(message)).await {
+                        match sender.send(Message::Binary(message.into())).await {
                             Ok(_) => (), // message got send fine,
                             Err(err) => {
                                 // something broke the pipe, most likely the connection was closed in between await operations

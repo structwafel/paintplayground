@@ -18,11 +18,12 @@ use paintplayground::types::*;
 
 pub fn all_routes(state: AppState) -> Router {
     let compression_layer = CompressionLayer::new().gzip(true);
+
     Router::new()
-        .nest_service("/", ServeDir::new("public"))
+        .route_service("/", ServeDir::new("public"))
         .nest_service("/js", ServeDir::new("js"))
-        .route("/ws/:x/:y", get(crate::ws::ws_handler))
-        .route("/chunk/:x/:y", get(get_chunk))
+        .route("/ws/{x}/{y}", get(crate::ws::ws_handler))
+        .route("/chunk/{x}/{y}", get(get_chunk))
         .route("/connections", get(get_connections))
         .route("/screenshot", get(screenshot_handler))
         // .layer(

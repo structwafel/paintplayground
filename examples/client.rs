@@ -31,8 +31,8 @@ use futures::{SinkExt, StreamExt};
 
 use tokio_tungstenite::connect_async;
 use tungstenite::{
-    protocol::{frame::coding::CloseCode, CloseFrame},
     Message,
+    protocol::{CloseFrame, frame::coding::CloseCode},
 };
 
 use paintplayground::types::*;
@@ -71,8 +71,8 @@ async fn spawn_client(who: usize) {
     //spawn an async sender to push some more messages into the server
     let mut send_task = tokio::spawn(async move {
         loop {
-            let random_index = rand::random::<usize>() % 10_000;
-            let random_color = rand::random::<u8>() % 15;
+            let random_index = rand::random_range(0..CHUNK_SIZE);
+            let random_color = rand::random_range(0..=15);
 
             let packed_cell = PackedCell::new(random_index, random_color).unwrap();
 
