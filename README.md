@@ -1,4 +1,4 @@
-## Paint Playground
+# Paint Playground
 
 A websocket service where everyone can contribute to sections of a complete playground
 
@@ -13,6 +13,6 @@ A websocket service where everyone can contribute to sections of a complete play
 
 
 
-## Todo
+# Todo
 - [ ] s3 bucket instead of files
 - [ ] make screenshot available on website
