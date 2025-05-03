@@ -4,7 +4,7 @@ import { getWsUrl } from './utils.js';
 let mouseDown = false;
 let changedSquare = false;
 
-export class ChunkManager {
+export class CanvasManager {
     constructor(x, y) {
         this.socket = this.connect_ws(x, y);
 

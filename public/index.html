@@ -122,22 +122,7 @@
         <button class="navigationButton" id="leftButton">←</button>
         <div id="gridContainer"></div>
     </div>
-    <script type="module" src="stuff.js"></script>
-    <script type="module">
-        import { selectedColor, colorMapping, colorFromNumber } from './js/color.js';
-
-        // document.getElementById('color-picker').addEventListener('click', function (event) {
-        //     selectedColor = event.target.id;
-        // });
-
-        // Set the background color of the color buttons
-        Object.keys(colorMapping).forEach(key => {
-            const button = document.getElementById(key);
-            if (button) {
-                button.style.backgroundColor = colorFromNumber(colorMapping[key]);
-            }
-        });
-    </script>
+    <script type="module" src="./js/bundled.js"></script>
 </body>
 
 </html>

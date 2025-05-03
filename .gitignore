@@ -4,3 +4,4 @@
 *.zst
 *.chunk
 *.png
+/js/bundled.js

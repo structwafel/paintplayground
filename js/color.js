@@ -58,3 +58,11 @@ export function colorFromNumber(number) {
 document.getElementById('color-picker').addEventListener('click', function (event) {
     selectedColor = event.target.id;
 });
+
+// Set the background color of the color buttons
+Object.keys(colorMapping).forEach(key => {
+    const button = document.getElementById(key);
+    if (button) {
+        button.style.backgroundColor = colorFromNumber(colorMapping[key]);
+    }
+});
