@@ -107,7 +107,7 @@ fn calculate_stuff() {
     let compressed = std::fs::read("chunk.lz4").unwrap();
     let decompressed = lz4_flex::decompress(&compressed, CHUNKDATA_SIZE).unwrap();
 
-    let mut chunk2 = Chunk::from_slice(&decompressed);
+    let chunk2 = Chunk::from_slice(&decompressed);
 
     // chunk2.set(11, 1, 1);
     // check if the data is the same

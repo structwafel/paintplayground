@@ -3,13 +3,12 @@ use axum::{
     body::Body,
     extract::{Path, Query, State},
     response::IntoResponse,
-    routing::{Route, get},
+    routing::get,
 };
 use serde::Deserialize;
 use tower_http::{
     compression::CompressionLayer,
     services::ServeDir,
-    trace::{DefaultMakeSpan, TraceLayer},
 };
 
 use crate::AppState;

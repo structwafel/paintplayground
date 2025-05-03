@@ -32,7 +32,7 @@ pub async fn ws_handler(
 }
 
 struct WebSocketHandler {
-    coordinates: ChunkCoordinates,
+    _coordinates: ChunkCoordinates,
     handler_data: chunk_manager::HandlerData,
     // broadcast_rx: broadcast::Receiver<Vec<PackedCell>>,
     // update_tx: mpsc::Sender<Vec<PackedCell>>,
@@ -58,7 +58,7 @@ impl WebSocketHandler {
                     socket.send(Message::Binary(message.into())).await.unwrap();
                     return Err(socket);
                 }
-                board_manager::BoardManagerError::LoadingChunks => {
+                board_manager::BoardManagerError::_LoadingChunks => {
                     let message = WsMessage::chunk_not_found_buffer();
                     socket.send(Message::Binary(message.into())).await.unwrap();
                     return Err(socket);
@@ -83,7 +83,7 @@ impl WebSocketHandler {
         let (sender, receiver) = socket.split();
 
         Ok(Self {
-            coordinates,
+            _coordinates: coordinates,
             handler_data,
             // broadcast_rx: handler_data.broadcast_rx,
             // update_tx: handler_data.update_tx,

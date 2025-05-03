@@ -1,9 +1,9 @@
-use crate::{
-    Chunk, ChunkCoordinates,
-    chunk_db::{ChunkLoaderSaver, SimpleToFileSaver},
-};
+use crate::{Chunk, ChunkCoordinates};
 
-use paintplayground::types::*;
+use paintplayground::{
+    chunk_db::{ChunkLoaderSaver, SimpleToFileSaver},
+    types::*,
+};
 
 pub struct Screenshot {
     chunks: Vec<Vec<Option<Chunk>>>,
@@ -91,7 +91,7 @@ impl Screenshot {
                                     for dx in 0..scale {
                                         let x_offset = base_x + x * scale + dx;
                                         let pixel_index =
-                                            ((y_offset * img_width as usize + x_offset) * 3);
+                                            (y_offset * img_width as usize + x_offset) * 3;
                                         buffer[pixel_index] = r;
                                         buffer[pixel_index + 1] = g;
                                         buffer[pixel_index + 2] = b;

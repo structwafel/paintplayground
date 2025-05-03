@@ -3,11 +3,17 @@ use std::{
     io::{Read, Write},
 };
 
-use paintplayground::types::*;
+use crate::types::*;
+use s3::{creds::Credentials, error::S3Error};
 
 #[trait_variant::make(ChunkLoaderSaver: Send)]
 pub trait LocalChunkLoaderSaver: Send + Sync + Debug {
-    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates);
+    async fn save_chunk(
+        &self,
+        chunk: Chunk,
+        coordinates: ChunkCoordinates,
+    ) -> Result<(), ChunkLoaderSaverError>;
+
     async fn load_chunk(
         &self,
         coordinates: ChunkCoordinates,
@@ -18,7 +24,8 @@ pub trait LocalChunkLoaderSaver: Send + Sync + Debug {
 #[derive(Debug)]
 pub enum ChunkLoaderSaverError {
     ChunkLoadError(String),
-    ChunkSaveError(()),
+    ChunkSaveError(String),
+    CompressionError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -33,20 +40,24 @@ impl SimpleToFileSaver {
     }
 
     fn file_path(&self, coordinates: ChunkCoordinates) -> String {
-        format!("canvas/{}_{}.chunk", coordinates.x(), coordinates.y())
+        format!("canvas/{}", coordinates.object_name())
     }
 }
 
-// todo use compression for smaller saved files
 /// Saves in canvas dir
 impl ChunkLoaderSaver for SimpleToFileSaver {
-    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
-        // save the chunk to the file system
+    async fn save_chunk(
+        &self,
+        chunk: Chunk,
+        coordinates: ChunkCoordinates,
+    ) -> Result<(), ChunkLoaderSaverError> {
         debug!("Saving chunk at {:?}", coordinates);
         let mut file = File::create(self.file_path(coordinates)).unwrap();
-        // use best compression before saving
-        // let compressed = chunk.to_compressed();
-        file.write_all(&chunk.to_u8vec()).unwrap();
+
+        file.write_all(&chunk.to_storage_bytes(USED_COMPRESSION))
+            .unwrap();
+
+        Ok(())
     }
 
     async fn load_chunk(
@@ -90,18 +101,73 @@ impl ChunkLoaderSaver for SimpleToFileSaver {
         };
 
         Ok(match buf {
-            Some(data) => data.into(),
+            Some(data) => Chunk::from_raw_data(&data)
+                .map_err(|err| ChunkLoaderSaverError::CompressionError(err.to_string()))?,
             None => Chunk::new(),
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct S3ChunkSaver {}
+pub struct CFR2ChunkSaver {
+    client: Box<s3::Bucket>,
+}
+impl CFR2ChunkSaver {
+    pub fn new(
+        access_key_id: &str,
+        secret_access_key: &str,
+        account_id: &str,
+        bucket: &str,
+    ) -> Self {
+        let credentials = Credentials::new(
+            Some(access_key_id),
+            Some(secret_access_key),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
-impl ChunkLoaderSaver for S3ChunkSaver {
-    async fn save_chunk(&self, chunk: Chunk, coordinates: ChunkCoordinates) {
-        todo!()
+        let client = s3::Bucket::new(
+            bucket,
+            s3::Region::R2 {
+                account_id: account_id.to_string(),
+            },
+            credentials,
+        )
+        .unwrap();
+        CFR2ChunkSaver { client: client }
+    }
+
+    pub fn new_from_env() -> Self {
+        let access_key_id = std::env::var("S3ACCESSKEY").unwrap();
+        let secret_access_key = std::env::var("S3SECRETACCESSKEY").unwrap();
+        let account_id = std::env::var("S3ACCOUNTID").unwrap();
+        let bucket = std::env::var("S3BUCKETNAME").unwrap();
+
+        CFR2ChunkSaver::new(&access_key_id, &secret_access_key, &account_id, &bucket)
+    }
+
+    fn object_path(coordinates: ChunkCoordinates) -> String {
+        format!("chunks/{}", coordinates.object_name())
+    }
+}
+
+impl ChunkLoaderSaver for CFR2ChunkSaver {
+    async fn save_chunk(
+        &self,
+        chunk: Chunk,
+        coordinates: ChunkCoordinates,
+    ) -> Result<(), ChunkLoaderSaverError> {
+        self.client
+            .put_object(
+                Self::object_path(coordinates),
+                &chunk.to_storage_bytes(USED_COMPRESSION),
+            )
+            .await
+            .map_err(|err| ChunkLoaderSaverError::ChunkSaveError(err.to_string()))?;
+
+        Ok(())
     }
 
     async fn load_chunk(
@@ -109,17 +175,38 @@ impl ChunkLoaderSaver for S3ChunkSaver {
         coordinates: ChunkCoordinates,
         create_new: bool,
     ) -> Result<Chunk, ChunkLoaderSaverError> {
-        todo!()
+        match self.client.get_object(Self::object_path(coordinates)).await {
+            Ok(result) => {
+                // return the chunk
+                Ok(Chunk::from_raw_data(result.as_slice())
+                    .map_err(|err| ChunkLoaderSaverError::CompressionError(err.to_string()))?)
+            }
+            Err(S3Error::HttpFailWithBody(404, _)) => {
+                if create_new {
+                    Ok(Chunk::new())
+                } else {
+                    Err(ChunkLoaderSaverError::ChunkLoadError(
+                        "chunk not found".into(),
+                    ))
+                }
+            }
+            Err(err) => Err(ChunkLoaderSaverError::ChunkLoadError(format!(
+                "Error loading chunk from R2 at {:?}: {:?}",
+                coordinates, err
+            ))),
+        }
     }
 }
 
 #[cfg(test)]
 mod testing {
 
+    
+
     use crate::chunk_db;
 
     use super::*;
-    use paintplayground::types::SmallChunkArray;
+    use crate::types::SmallChunkArray;
 
     // Initialize tracing subscriber
 
@@ -185,5 +272,45 @@ mod testing {
         chunk.iter().zip(chunk2.iter()).for_each(|(a, b)| {
             assert_eq!((a.left(), a.right()), (b.left(), b.right()),);
         });
+    }
+
+    // test to see if r2 works
+    #[tokio::test]
+    async fn test_r2_bucket() {
+        dotenvy::dotenv().unwrap();
+
+        let loader = CFR2ChunkSaver::new_from_env();
+
+        let chunk = chunk_db::ChunkLoaderSaver::load_chunk(
+            &loader,
+            ChunkCoordinates::new(10, 10).unwrap(), // 10,10 doesn't exist
+            false,
+        )
+        .await;
+
+        assert!(chunk.is_err());
+
+        let mut new_chunk = Chunk::new();
+        new_chunk[0].set_left(Color::One);
+
+        chunk_db::ChunkLoaderSaver::save_chunk(
+            &loader,
+            new_chunk.clone(),
+            ChunkCoordinates::new(10, 0).unwrap(),
+        )
+        .await;
+
+        // let's try and get it again
+        let chunk = chunk_db::ChunkLoaderSaver::load_chunk(
+            &loader,
+            ChunkCoordinates::new(10, 0).unwrap(),
+            false,
+        )
+        .await;
+
+        assert!(chunk.is_ok());
+        let chunk = chunk.unwrap();
+
+        assert_eq!(new_chunk[0], chunk[0])
     }
 }

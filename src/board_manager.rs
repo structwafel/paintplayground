@@ -1,20 +1,14 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicI64, AtomicU64},
-};
+use std::sync::{Arc, atomic::AtomicU64};
 
-use crate::{
-    chunk_db::ChunkLoaderSaver,
-    chunk_manager::{ChunkManager, ChunkUpdate, HandlerData},
-};
-use paintplayground::types::*;
+use crate::chunk_manager::{ChunkManager, ChunkUpdate, HandlerData};
+use paintplayground::{chunk_db::ChunkLoaderSaver, types::*};
 
 #[derive(thiserror::Error, Debug)]
 pub enum BoardManagerError {
     #[error("too many chunks loaded")]
     TooManyChunksLoaded,
     #[error("failed to load chunk/chunks")]
-    LoadingChunks,
+    _LoadingChunks,
 }
 
 #[derive(Debug)]
@@ -198,7 +192,7 @@ where
                                 // ! it needs to save itself before sending this message
                                 let _ = self.chunks.remove(&coords);
                             }
-                            ChunkUpdate::Save => {
+                            ChunkUpdate::_Save => {
                                 // ? Is probably better if Chunks just save themselves instead of the BoardManager
                             }
                         },

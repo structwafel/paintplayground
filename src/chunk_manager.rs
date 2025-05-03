@@ -2,14 +2,13 @@ use std::{error::Error, time::Duration};
 
 use tracing::error;
 
-use crate::chunk_db::ChunkLoaderSaver;
-use paintplayground::types::*;
+use paintplayground::{chunk_db::ChunkLoaderSaver, types::*};
 
 pub enum ChunkUpdate {
     /// The chunk manager doesn't have any clients, and can be removed
     Clear(ChunkCoordinates),
     /// Enough updates have been made to the chunk, and it should be saved
-    Save,
+    _Save,
 }
 
 #[derive(Debug)]
@@ -182,9 +181,12 @@ where
             // broadcast the changes made to all the clients
             self.broadcast(last_changes);
 
+            // todo, only save every some time. and save on exit
             // save the chunk, if it has been changed
-            self.chunk_saver
-                .save_chunk(self.chunk.clone(), self.coordinates);
+            let _ = self
+                .chunk_saver
+                .save_chunk(self.chunk.clone(), self.coordinates)
+                .await;
         }
 
         // loop is stopped, lets destroy ourselves
@@ -225,8 +227,9 @@ where
             .await?;
 
         // save the chunk, One LAST TIME
-        self.chunk_saver
-            .save_chunk(self.chunk.clone(), self.coordinates);
+        let _ = self
+            .chunk_saver
+            .save_chunk(self.chunk.clone(), self.coordinates); // silent error, let's go
 
         // You can stop now
         return Ok(());
@@ -277,7 +280,7 @@ impl HandlerData {
         oneshot_chunk_rx.await.unwrap()
     }
 
-    pub async fn is_alive(&self) -> bool {
+    pub async fn _is_alive(&self) -> bool {
         let (oneshot_ping_tx, mut oneshot_ping_rx) = oneshot::channel();
         self.ping_chunk_requester_tx
             .send(oneshot_ping_tx)

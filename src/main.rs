@@ -1,12 +1,9 @@
-#![allow(unused)]
-
 use std::{
     env,
     net::SocketAddr,
     sync::{LazyLock, atomic::AtomicUsize},
 };
 
-use chunk_db::{ChunkLoaderSaver, SimpleToFileSaver};
 use mimalloc::MiMalloc;
 
 // When alot of connections are made at the same time, default allocator doesn't release the memory at all.
@@ -22,7 +19,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 use tracing::debug;
 
 mod board_manager;
-mod chunk_db;
 mod chunk_manager;
 mod router;
 mod screenshot;
@@ -30,7 +26,10 @@ mod screenshot;
 mod tests;
 mod ws;
 
-use paintplayground::types::*;
+use paintplayground::{
+    chunk_db::CFR2ChunkSaver,
+    types::*,
+};
 
 const CLEAR_BUFFER_INTERVAL_DEFAULT: u64 = 500;
 
@@ -86,6 +85,7 @@ impl AppState {
 #[tokio::main]
 async fn main() {
     // console_subscriber::init();
+    dotenvy::dotenv().unwrap();
 
     let args: Vec<String> = env::args().collect();
 
@@ -117,7 +117,7 @@ async fn main() {
 
     startup_things().await;
 
-    let chunk_saver = SimpleToFileSaver {};
+    let chunk_saver = CFR2ChunkSaver::new_from_env();
 
     // start THE BoardManager
     let board_manager_communicator = board_manager::BoardManager::start(chunk_saver);

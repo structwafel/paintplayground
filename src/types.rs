@@ -228,6 +228,16 @@ impl ChunkColor {
         self.0 = (self.0 & 0b11110000) | color.u8()
     }
 }
+
+pub const USED_COMPRESSION: CompressionType = CompressionType::Zstd;
+
+pub enum CompressionType {
+    None,
+    Zstd,
+    Lz4,
+    // Gzip, // it is very compact, but very slow
+}
+
 type ChunkArray<const N: usize> = [ChunkColor; N];
 // type ChunkArray = [ChunkColor; CHUNK_SIZE / 2];
 
@@ -245,6 +255,76 @@ impl Chunk {
             .iter()
             .flat_map(|chunk_color| vec![chunk_color.left_color(), chunk_color.right_color()])
             .collect()
+    }
+
+    pub fn from_raw_data(data: &[u8]) -> Result<Self, String> {
+        if data.is_empty() {
+            return Err("empty data".into());
+        }
+
+        // if we are reading exactly byte size, we have an old uncompressed format
+        if data.len() == CHUNK_BYTE_SIZE {
+            return Ok(data.to_vec().into());
+        }
+
+        let format = data[0];
+        let content = &data[1..];
+
+        match format {
+            0 => {
+                if content.len() != CHUNK_BYTE_SIZE {
+                    return Err("Invalid chunk size with uncompressed data".into());
+                }
+                Ok(content.to_vec().into())
+            }
+            // ZSTD compressed
+            1 => {
+                let uncompressed =
+                    ZstdCompression::decompress(content, CHUNK_BYTE_SIZE).map_err(|err| {
+                        let text = format!("zstd decompression failed: {}", err);
+                        error!(text);
+                        text
+                    })?;
+                Ok(uncompressed.into())
+            }
+            // Lz4 compressed
+            2 => {
+                let uncompressed =
+                    LZ4Compression::decompress(content, CHUNK_BYTE_SIZE).map_err(|err| {
+                        let text = format!("lz4 decompression failed: {}", err);
+                        error!(text);
+                        text
+                    })?;
+                Ok(uncompressed.into())
+            }
+            _ => Err("Unknown compression format".into()),
+        }
+    }
+
+    pub fn to_storage_bytes(self, compression: CompressionType) -> Vec<u8> {
+        let mut result = Vec::with_capacity(CHUNK_BYTE_SIZE + 1);
+        let raw_data = self.to_u8vec();
+
+        match compression {
+            CompressionType::None => {
+                result.push(0); // no compression
+                result.extend_from_slice(&raw_data);
+            }
+            CompressionType::Zstd => {
+                result.push(1); // zstd compression
+                let compressed =
+                    ZstdCompression::compress(&raw_data).expect("failed to compress with zstd");
+                result.extend_from_slice(&compressed);
+            }
+            CompressionType::Lz4 => {
+                result.push(2);
+                let compressed =
+                    LZ4Compression::compress(&raw_data).expect("failed to compress with zstd");
+                result.extend_from_slice(&compressed);
+            }
+        }
+
+        result
     }
 }
 
@@ -315,14 +395,6 @@ impl<const N: usize> InnerChunk<N> {
         //     unsafe { std::slice::from_raw_parts(self.0.as_ptr() as *const u8, self.0.len()) };
         // slice.to_vec()
     }
-
-    // ? add compression
-    // pub(crate) fn to_compressed(&self) -> Vec<u8> {
-    // let mut encoder = lz4::EncoderBuilder::new().build(Vec::new()).unwrap();
-    // encoder.write_all(&self.to_u8vec()).unwrap();
-    // encoder.finish().0
-    // unimplemented!()
-    // }
 }
 
 impl<const N: usize> Into<Vec<u8>> for InnerChunk<N> {
@@ -373,9 +445,18 @@ impl ChunkCoordinates {
     pub fn y(&self) -> i64 {
         self.y
     }
+
+    /// The chunk name of this coordinate
+    pub fn object_name(&self) -> String {
+        format!("{}_{}.chunk", self.x, self.y)
+    }
 }
 
 use serde::{Deserialize, Serialize};
+
+use crate::compression::Compression;
+use crate::compression::LZ4Compression;
+use crate::compression::ZstdCompression;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CellChangeMessage {

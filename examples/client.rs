@@ -25,15 +25,12 @@ async fn main() {
     spawn_clients(quantity).await
 }
 
-use std::{borrow::Cow, ops::ControlFlow};
+use std::ops::ControlFlow;
 
 use futures::{SinkExt, StreamExt};
 
 use tokio_tungstenite::connect_async;
-use tungstenite::{
-    Message,
-    protocol::{CloseFrame, frame::coding::CloseCode},
-};
+use tungstenite::Message;
 
 use paintplayground::types::*;
 
@@ -91,16 +88,16 @@ async fn spawn_client(who: usize) {
         }
 
         // When we are done we may want our client to close connection cleanly.
-        println!("Sending close to {who}...");
-        if let Err(e) = sender
-            .send(Message::Close(Some(CloseFrame {
-                code: CloseCode::Normal,
-                reason: Cow::from("Goodbye"),
-            })))
-            .await
-        {
-            println!("Could not send Close due to {e:?}, probably it is ok?");
-        };
+        // println!("Sending close to {who}...");
+        // if let Err(e) = sender
+        //     .send(Message::Close(Some(CloseFrame {
+        //         code: CloseCode::Normal,
+        //         reason: Cow::from("Goodbye"),
+        //     })))
+        //     .await
+        // {
+        //     println!("Could not send Close due to {e:?}, probably it is ok?");
+        // };
     });
 
     //receiver just prints whatever it gets
