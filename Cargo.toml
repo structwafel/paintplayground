@@ -1,65 +1,16 @@
-[package]
-name = "paintplayground"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+members = ["server", "app", "app"]
 
-[[bin]]
-name = "server"
-path = "src/main.rs"
+[profile]
 
-# [[bin]]
-# name = "client"
-# path = "src/client.rs"
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
 
-[dependencies]
-futures = "0.3"
-futures-util = { version = "0.3", default-features = false, features = [
-    "sink",
-    "std",
-] }
+[profile.server-dev]
+inherits = "dev"
 
-tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
-# console-subscriber = "0.4.0"
-
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-axum = { version = "0.8.4", features = ["macros", "ws"] }
-axum-macros = "0.5.0"
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
-
-tower = { version = "0.5.2" }
-tower-http = { version = "0.6.2", features = [
-    "fs",
-    "trace",
-    "compression-gzip",
-] }
-
-serde = { version = "1.0.205", features = ["derive"] }
-serde_json = "1.0.122"
-
-rand = "0.9.1"
-
-mimalloc = "0.1.46"
-# jemallocator = "0.5.4"
-# moka = { version = "0.12.8", features = ["future"] }
-dashmap = "6.1.0"
-image = "0.25.6"
-png = "0.17.16"
-thiserror = "2.0.12"
-trait-variant = "0.1.2"
-rust-s3 = "0.35.1"
-dotenvy = "0.15.7"
-flate2 = "1.1.1"
-lz4_flex = "0.11.3"
-zstd = "0.13.3"
-
-[dev-dependencies]
-reqwest = "0.12.5"
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.23.1"
-tungstenite = "0.23.0"
-futures = "0.3"
-lz4_flex = "0.11.3"
+[profile.android-dev]
+inherits = "dev"
