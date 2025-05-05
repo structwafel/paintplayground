@@ -3,18 +3,8 @@
 A websocket service where everyone can contribute to sections of a complete playground
 
 
-
-
-
-
-
-
-
-
-
-
 # Todo
-- [ ] s3 bucket instead of files
+- [x] s3 bucket instead of files
 - [ ] make screenshot available on website
 
 # Experiments
@@ -34,12 +24,13 @@ Then through websocket the `ChunkManager` receives updates from all the connecte
 
 This was done such that each chunk will be processed in parallel with other chunks, making it even possible to make a service of the boardmanager and make the chunkmanagers distributed per region on the board.
 
+```
       Client 
          |
     BoardManager
     /    |    \
   CM1   CM2   C23
-
+```
 
 ## Storage
 
@@ -57,10 +48,10 @@ Multiple compressions are supported, and the used compression is saved as the fi
 
 Expected storage requirements for a "big" 1000x1000 board:
 
-- 2x compression ratio =>  2.5TB
-- 5x compression ratio =>    1TB
-- 10x compression ratio => 500GB
+- 2x compression ratio  =>  2.5TB
+- 5x compression ratio  =>    1TB
+- 10x compression ratio =>  500GB
 
-My expectation that we will hover around the 5x compression ratio
+My expectation that we will hover around the 5x compression ratio.
 
-but for 1_000_000 chunks there will probably be alot of undiscovered chunks, or non-random chunks.
+But for 1_000_000 chunks there will probably be alot of undiscovered chunks, or non-random chunks.
