@@ -1,6 +1,6 @@
 use std::{io::Write, os::unix::fs::MetadataExt};
 
-use paintplayground::types::{CHUNK_BYTE_SIZE, CHUNK_LENGTH, CHUNK_SIZE, Chunk};
+use paintplayground::types::{CHUNK_BYTE_SIZE, CHUNK_SIZE, Chunk, PackedCell};
 
 const CHUNKS_IN_DIRECTION: usize = 20000;
 const CHUNKS_IN_MAP: usize = CHUNKS_IN_DIRECTION * CHUNKS_IN_DIRECTION;
@@ -35,25 +35,24 @@ fn calculate_stuff() {
 
     println!();
     let mut chunk = Chunk::new();
-    let mut one_pixel_chunk = Chunk::new();
-    chunk.set(0, 0, 1);
+    chunk.apply_packed_cell(&PackedCell::new(0, 1).unwrap());
 
-    // data at set indexes
     for i in 0..CHUNK_SIZE {
-        for j in 0..CHUNK_SIZE {
-            // random number between 0 and 15
-            let value = rand::random::<u8>() % 16;
+        // random number between 0 and 15
+        let value = rand::random::<u8>() % 16;
 
-            chunk.set(i, j, value);
+        if let Some(packed_cell) = PackedCell::new(i, value) {
+            chunk.apply_packed_cell(&packed_cell);
         }
     }
 
     // length of data
-    println!("data length: {}", chunk.data.len());
+    let chunk_data = chunk.data();
+    println!("data length: {}", chunk_data.len());
 
     // save chunk to a file
     let mut file = std::fs::File::create("chunk.bin").unwrap();
-    file.write_all(&chunk.data).unwrap();
+    file.write_all(&chunk_data).unwrap();
 
     let file_bytes = std::fs::metadata("chunk.bin").unwrap().size();
     // print file size
@@ -71,7 +70,8 @@ fn calculate_stuff() {
     );
 
     // now compress the data and save it to a file using LZ4 or Zstd
-    let compressed = lz4_flex::compress(&chunk.data);
+    let chunk_data = chunk.data();
+    let compressed = lz4_flex::compress(&chunk_data);
     let mut file = std::fs::File::create("chunk.lz4").unwrap();
     file.write_all(&compressed).unwrap();
 

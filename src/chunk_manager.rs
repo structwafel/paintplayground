@@ -162,19 +162,7 @@ where
             {
                 // debug!("CH - {:?} applying changes", self.coordinates);
                 for changes in &last_changes {
-                    let packed_index = changes.index();
-
-                    // changes only have one color, so we need to know which side and color it is
-                    let byte_index = packed_index / 2;
-                    let is_left = packed_index % 2 == 0;
-
-                    if let Some(chunk_color) = self.chunk.get_mut(byte_index) {
-                        if is_left {
-                            chunk_color.set_left(changes.color());
-                        } else {
-                            chunk_color.set_right(changes.color());
-                        }
-                    }
+                    self.chunk.apply_packed_cell(changes);
                 }
             }
 

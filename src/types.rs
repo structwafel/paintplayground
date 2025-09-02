@@ -395,6 +395,36 @@ impl<const N: usize> InnerChunk<N> {
         //     unsafe { std::slice::from_raw_parts(self.0.as_ptr() as *const u8, self.0.len()) };
         // slice.to_vec()
     }
+
+    /// Set a pixel color at a packed index (0 to CHUNK_SIZE-1)
+    pub fn set_pixel(&mut self, packed_index: usize, color: Color) {
+        if packed_index >= CHUNK_SIZE {
+            return;
+        }
+
+        let byte_index = packed_index / 2;
+        let is_left = packed_index & 1 == 0;
+
+        if byte_index >= N {
+            return;
+        }
+
+        let chunk_array = Arc::make_mut(&mut self.0);
+        if is_left {
+            chunk_array[byte_index].set_left(color);
+        } else {
+            chunk_array[byte_index].set_right(color);
+        }
+    }
+
+    /// Apply a PackedCell update to this chunk
+    pub fn apply_packed_cell(&mut self, packed_cell: &PackedCell) {
+        self.set_pixel(packed_cell.index(), packed_cell.color());
+    }
+
+    pub fn data(&self) -> Vec<u8> {
+        self.clone().to_u8vec()
+    }
 }
 
 impl<const N: usize> Into<Vec<u8>> for InnerChunk<N> {

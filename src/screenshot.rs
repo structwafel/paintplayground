@@ -149,7 +149,7 @@ impl Screenshot {
 
                                         // Calculate byte position and bit position within byte
                                         let byte_pos = pixel_pos / 2;
-                                        let is_high_nibble = pixel_pos % 2 == 0;
+                                        let is_high_nibble = pixel_pos & 1 == 0;
 
                                         // Update the right nibble of the byte
                                         if is_high_nibble {
