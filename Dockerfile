@@ -15,6 +15,7 @@ RUN cargo build --release
 FROM scratch
 
 COPY --from=build /paintplayground/target/release/server /bin/server
+COPY --from=build /paintplayground/public /paintplayground/public
 
 WORKDIR /paintplayground
 ENTRYPOINT ["/bin/server"]
