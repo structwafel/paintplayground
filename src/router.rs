@@ -15,12 +15,14 @@ use crate::AppState;
 use crate::{board_manager::ChunkRequest, screenshot};
 use paintplayground::types::*;
 
+const BUNDLED_JS: &[u8] = include_bytes!("../js/bundled.js");
+
 pub fn all_routes(state: AppState) -> Router {
     let compression_layer = CompressionLayer::new().gzip(true);
 
     Router::new()
         .route_service("/", ServeDir::new("public"))
-        .nest_service("/js", ServeDir::new("js"))
+        .route("/js/bundled.js", get(serve_bundled_js))
         .route("/ws/{x}/{y}", get(crate::ws::ws_handler))
         .route("/chunk/{x}/{y}", get(get_chunk))
         .route("/connections", get(get_connections))
@@ -31,6 +33,14 @@ pub fn all_routes(state: AppState) -> Router {
         // )
         .layer(compression_layer)
         .with_state(state)
+}
+
+async fn serve_bundled_js() -> impl IntoResponse {
+    axum::response::Response::builder()
+        .header("Content-Type", "application/javascript")
+        .header("Cache-Control", "public, max-age=3600")
+        .body(Body::from(BUNDLED_JS))
+        .unwrap()
 }
 
 async fn get_connections(State(state): State<AppState>) -> String {
