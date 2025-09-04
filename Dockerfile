@@ -16,6 +16,7 @@ FROM scratch
 
 COPY --from=build /paintplayground/target/release/server /bin/server
 COPY --from=build /paintplayground/public /paintplayground/public
+COPY --from=build /paintplayground/js/bundled.js /paintplayground/public/js/bundled.js
 
 WORKDIR /paintplayground
 ENTRYPOINT ["/bin/server"]
