@@ -18,9 +18,10 @@ fn bundle_js_files(js_dir: &str, output_file: &str) -> std::io::Result<()> {
     // combined_js.push_str(&chrono::Local::now().to_string());
     combined_js.push_str(" */\n\n");
 
-    collect_js_files(dir_path, &mut Vec::new())?.sort();
+    let mut js_files = collect_js_files(dir_path, &mut Vec::new())?;
+    js_files = order_js_files_by_dependencies(js_files)?;
 
-    for js_file in collect_js_files(dir_path, &mut Vec::new())? {
+    for js_file in js_files {
         if js_file.to_string_lossy() == output_file {
             continue;
         }
@@ -72,4 +73,37 @@ fn collect_js_files(dir: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<Vec
     }
 
     Ok(files.to_vec())
+}
+
+fn order_js_files_by_dependencies(mut files: Vec<PathBuf>) -> std::io::Result<Vec<PathBuf>> {
+    // Define explicit ordering - dependencies first
+    let ordering = [
+        "utils.js",
+        "cell.js",
+        "color.js",
+        "manager.js", // ChunkManager must come before files that use it
+        "canvas.js",
+        "grid.js",
+        "ws.js",
+        "stuff.js", // This uses ChunkManager, so it comes after
+    ];
+
+    // Sort files according to the defined order
+    files.sort_by(|a, b| {
+        let name_a = a.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let name_b = b.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        let pos_a = ordering
+            .iter()
+            .position(|&x| x == name_a)
+            .unwrap_or(usize::MAX);
+        let pos_b = ordering
+            .iter()
+            .position(|&x| x == name_b)
+            .unwrap_or(usize::MAX);
+
+        pos_a.cmp(&pos_b)
+    });
+
+    Ok(files)
 }
