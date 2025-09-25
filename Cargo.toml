@@ -46,7 +46,7 @@ image = "0.25"
 png = "0.17"
 thiserror = "2.0"
 trait-variant = "0.1"
-rust-s3 = "0.37"
+rust-s3 = { version = "0.37", default-features = false, features = ["tokio-rustls-tls"] }
 dotenvy = "0.15"
 flate2 = "1.1"
 lz4_flex = "0.11"
