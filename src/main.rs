@@ -112,7 +112,7 @@ async fn main() {
         .with_target(false)
         .init();
 
-    startup_things().await;
+    // startup_things().await; // we use r2 now
 
     let chunk_saver = CFR2ChunkSaver::new_from_env();
 
