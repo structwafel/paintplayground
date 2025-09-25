@@ -307,6 +307,7 @@ mod testing {
         )
         .await;
 
+        dbg!(&chunk);
         assert!(chunk.is_ok());
         let chunk = chunk.unwrap();
 
