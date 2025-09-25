@@ -1,4 +1,4 @@
-FROM rust:alpine3 AS build
+FROM rust:alpine3.21 AS build
 
 RUN apk update && \
     apk upgrade --no-cache && \
